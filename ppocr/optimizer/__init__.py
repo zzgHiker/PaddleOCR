@@ -34,9 +34,12 @@ def build_optimizer(config, epochs, step_each_epoch, model):
     from . import regularizer, optimizer
     config = copy.deepcopy(config)
     # step1 build lr
+    # 构建学习率
     lr = build_lr_scheduler(config.pop('lr'), epochs, step_each_epoch)
 
     # step2 build regularization
+    # 构建正则化项，用于控制模型的复杂度，以减少过拟合的风险
+    # 支持：L1Decay, L2Decay
     if 'regularizer' in config and config['regularizer'] is not None:
         reg_config = config.pop('regularizer')
         reg_name = reg_config.pop('name')
@@ -49,15 +52,20 @@ def build_optimizer(config, epochs, step_each_epoch, model):
         reg = None
 
     # step3 build optimizer
+    # 构建优化器
+    # 梯度裁剪可以防止梯度爆炸
     optim_name = config.pop('name')
     if 'clip_norm' in config:
+        # 按范数裁剪梯度，可能会导致不同参数之间的梯度比例失衡
         clip_norm = config.pop('clip_norm')
         grad_clip = paddle.nn.ClipGradByNorm(clip_norm=clip_norm)
     elif 'clip_norm_global' in config:
+        # 按全局范数裁剪梯度，可能需要额外的计算来合并和裁剪全局梯度
         clip_norm = config.pop('clip_norm_global')
         grad_clip = paddle.nn.ClipGradByGlobalNorm(clip_norm=clip_norm)
     else:
         grad_clip = None
+
     optim = getattr(optimizer, optim_name)(learning_rate=lr,
                                            weight_decay=reg,
                                            grad_clip=grad_clip,

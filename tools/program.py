@@ -641,6 +641,7 @@ def preprocess(is_train=False):
 
     if is_train:
         # save_config
+        # 保存配置信息
         save_model_dir = config['Global']['save_model_dir']
         os.makedirs(save_model_dir, exist_ok=True)
         with open(os.path.join(save_model_dir, 'config.yml'), 'w') as f:
@@ -657,6 +658,7 @@ def preprocess(is_train=False):
     use_npu = config['Global'].get('use_npu', False)
     use_mlu = config['Global'].get('use_mlu', False)
 
+    # 检查算法是否在支持清单中
     alg = config['Architecture']['algorithm']
     assert alg in [
         'EAST', 'DB', 'SAST', 'Rosetta', 'CRNN', 'STARNet', 'RARE', 'SRN',

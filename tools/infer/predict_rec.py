@@ -14,6 +14,7 @@
 import os
 import sys
 from PIL import Image
+
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(__dir__)
 sys.path.insert(0, os.path.abspath(os.path.join(__dir__, '../..')))
@@ -136,7 +137,7 @@ class TextRecognizer(object):
                 model_precision=args.precision,
                 batch_size=args.rec_batch_num,
                 data_shape="dynamic",
-                save_path=None,  #args.save_log_path,
+                save_path=None,  # args.save_log_path,
                 inference_config=self.config,
                 pids=pid,
                 process_name=None,
@@ -359,8 +360,7 @@ class TextRecognizer(object):
 
         mean = np.array([0.485, 0.456, 0.406])
         std = np.array([0.229, 0.224, 0.225])
-        resized_image = (
-            resized_image - mean[None, None, ...]) / std[None, None, ...]
+        resized_image = (resized_image - mean[None, None, ...]) / std[None, None, ...]
         resized_image = resized_image.transpose((2, 0, 1))
         resized_image = resized_image.astype('float32')
 
@@ -627,7 +627,13 @@ class TextRecognizer(object):
                     self.predictor.try_shrink_memory()
             rec_result = self.postprocess_op(preds)
             for rno in range(len(rec_result)):
-                rec_res[indices[beg_img_no + rno]] = rec_result[rno]
+                text, conf, (char_len, char_pos) = rec_result[rno]
+                # 获取截图的高和宽
+                h, w = img_list[indices[beg_img_no + rno]].shape[0:2]
+                # 计算每个字符的位置
+                char_pos = [int(min(w, h) * max_wh_ratio * p / char_len)
+                            for p in char_pos]
+                rec_res[indices[beg_img_no + rno]] = (text, conf, char_pos)
             if self.benchmark:
                 self.autolog.times.end(stamp=True)
         return rec_res, time.time() - st

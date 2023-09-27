@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-import sys
 import subprocess
+import sys
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(__dir__)
@@ -35,6 +35,7 @@ import tools.infer.predict_cls as predict_cls
 from ppocr.utils.utility import get_image_file_list, check_and_read
 from ppocr.utils.logging import get_logger
 from tools.infer.utility import draw_ocr_box_txt, get_rotate_crop_image, get_minarea_rect_crop
+
 logger = get_logger()
 
 
@@ -59,7 +60,7 @@ class TextSystem(object):
         for bno in range(bbox_num):
             cv2.imwrite(
                 os.path.join(output_dir,
-                             f"mg_crop_{bno+self.crop_image_res_index}.jpg"),
+                             f"mg_crop_{bno + self.crop_image_res_index}.jpg"),
                 img_crop_list[bno])
             logger.debug(f"{bno}, {rec_res[bno]}")
         self.crop_image_res_index += bbox_num
@@ -73,6 +74,7 @@ class TextSystem(object):
 
         start = time.time()
         ori_im = img.copy()
+        # 检测，返回文本框和耗时
         dt_boxes, elapse = self.text_detector(img)
         time_dict['det'] = elapse
 
@@ -86,35 +88,48 @@ class TextSystem(object):
                 len(dt_boxes), elapse))
         img_crop_list = []
 
+        # 将文本框进行排序
+        # 顺序：从上到下，从左到右
         dt_boxes = sorted_boxes(dt_boxes)
 
         for bno in range(len(dt_boxes)):
+            # 图片截取
             tmp_box = copy.deepcopy(dt_boxes[bno])
             if self.args.det_box_type == "quad":
+                # 四边形
                 img_crop = get_rotate_crop_image(ori_im, tmp_box)
             else:
+                # 多边形最小外接圆
                 img_crop = get_minarea_rect_crop(ori_im, tmp_box)
             img_crop_list.append(img_crop)
+
         if self.use_angle_cls and cls:
+            # 对每个小图进行方向判断（分类）
             img_crop_list, angle_list, elapse = self.text_classifier(
                 img_crop_list)
             time_dict['cls'] = elapse
             logger.debug("cls num  : {}, elapsed : {}".format(
                 len(img_crop_list), elapse))
 
+        # 文本识别
         rec_res, elapse = self.text_recognizer(img_crop_list)
         time_dict['rec'] = elapse
         logger.debug("rec_res num  : {}, elapsed : {}".format(
             len(rec_res), elapse))
+
         if self.args.save_crop_res:
+            # 保存截取的小图
             self.draw_crop_rec_res(self.args.crop_res_save_dir, img_crop_list,
                                    rec_res)
         filter_boxes, filter_rec_res = [], []
         for box, rec_result in zip(dt_boxes, rec_res):
-            text, score = rec_result
+            text, score, _ = rec_result
+
+            # 根据置信度进行过滤
             if score >= self.drop_score:
                 filter_boxes.append(box)
                 filter_rec_res.append(rec_result)
+
         end = time.time()
         time_dict['all'] = end - start
         return filter_boxes, filter_rec_res, time_dict
@@ -162,6 +177,7 @@ def main(args):
 
     # warm up 10 times
     if args.warmup:
+        # 随机生成图片，每个像素在0～255间均匀分布
         img = np.random.uniform(0, 255, [640, 640, 3]).astype(np.uint8)
         for i in range(10):
             res = text_sys(img)
@@ -175,6 +191,7 @@ def main(args):
         img, flag_gif, flag_pdf = check_and_read(image_file)
         if not flag_gif and not flag_pdf:
             img = cv2.imread(image_file)
+
         if not flag_pdf:
             if img is None:
                 logger.debug("error in loading image:{}".format(image_file))
@@ -183,10 +200,13 @@ def main(args):
         else:
             page_num = args.page_num
             if page_num > len(img) or page_num == 0:
+                # 计算实际的页数
                 page_num = len(img)
             imgs = img[:page_num]
+
         for index, img in enumerate(imgs):
             starttime = time.time()
+            # 处理图片：检测+识别
             dt_boxes, rec_res, time_dict = text_sys(img)
             elapse = time.time() - starttime
             total_time += elapse
@@ -208,13 +228,14 @@ def main(args):
             if len(imgs) > 1:
                 save_pred = os.path.basename(image_file) + '_' + str(
                     index) + "\t" + json.dumps(
-                        res, ensure_ascii=False) + "\n"
+                    res, ensure_ascii=False) + "\n"
             else:
                 save_pred = os.path.basename(image_file) + "\t" + json.dumps(
                     res, ensure_ascii=False) + "\n"
             save_results.append(save_pred)
 
             if is_visualize:
+                # 可视化结果
                 image = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
                 boxes = dt_boxes
                 txts = [rec_res[i][0] for i in range(len(rec_res))]

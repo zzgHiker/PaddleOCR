@@ -76,7 +76,7 @@ class BaseRecLabelDecode(object):
             selection = np.ones(len(text_index[batch_idx]), dtype=bool)
             if is_remove_duplicate:
                 selection[1:] = text_index[batch_idx][1:] != text_index[
-                    batch_idx][:-1]
+                                                                 batch_idx][:-1]
             for ignored_token in ignored_tokens:
                 selection &= text_index[batch_idx] != ignored_token
 
@@ -96,7 +96,11 @@ class BaseRecLabelDecode(object):
             if self.reverse:  # for arabic rec
                 text = self.pred_reverse(text)
 
-            result_list.append((text, np.mean(conf_list).tolist()))
+            # 添加字符位置信息
+            chars_len = len(text_index[batch_idx])
+            chars_pos = np.where(selection)[0].tolist()
+            result_list.append(
+                (text, np.mean(conf_list).tolist(), (chars_len, chars_pos)))
         return result_list
 
     def get_ignored_tokens(self):
@@ -195,10 +199,10 @@ class AttnLabelDecode(BaseRecLabelDecode):
                 if is_remove_duplicate:
                     # only for predict
                     if idx > 0 and text_index[batch_idx][idx - 1] == text_index[
-                            batch_idx][idx]:
+                        batch_idx][idx]:
                         continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -275,10 +279,10 @@ class RFLLabelDecode(BaseRecLabelDecode):
                 if is_remove_duplicate:
                     # only for predict
                     if idx > 0 and text_index[batch_idx][idx - 1] == text_index[
-                            batch_idx][idx]:
+                        batch_idx][idx]:
                         continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -376,10 +380,10 @@ class SEEDLabelDecode(BaseRecLabelDecode):
                 if is_remove_duplicate:
                     # only for predict
                     if idx > 0 and text_index[batch_idx][idx - 1] == text_index[
-                            batch_idx][idx]:
+                        batch_idx][idx]:
                         continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -459,10 +463,10 @@ class SRNLabelDecode(BaseRecLabelDecode):
                 if is_remove_duplicate:
                     # only for predict
                     if idx > 0 and text_index[batch_idx][idx - 1] == text_index[
-                            batch_idx][idx]:
+                        batch_idx][idx]:
                         continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -535,10 +539,10 @@ class SARLabelDecode(BaseRecLabelDecode):
                 if is_remove_duplicate:
                     # only for predict
                     if idx > 0 and text_index[batch_idx][idx - 1] == text_index[
-                            batch_idx][idx]:
+                        batch_idx][idx]:
                         continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -611,10 +615,10 @@ class SATRNLabelDecode(BaseRecLabelDecode):
                 if is_remove_duplicate:
                     # only for predict
                     if idx > 0 and text_index[batch_idx][idx - 1] == text_index[
-                            batch_idx][idx]:
+                        batch_idx][idx]:
                         continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -710,10 +714,10 @@ class PRENLabelDecode(BaseRecLabelDecode):
                 if text_index[batch_idx][idx] == self.end_idx:
                     break
                 if text_index[batch_idx][idx] in \
-                    [self.padding_idx, self.unknown_idx]:
+                        [self.padding_idx, self.unknown_idx]:
                     continue
                 char_list.append(self.character[int(text_index[batch_idx][
-                    idx])])
+                                                        idx])])
                 if text_prob is not None:
                     conf_list.append(text_prob[batch_idx][idx])
                 else:
@@ -892,7 +896,7 @@ class VLLabelDecode(BaseRecLabelDecode):
             selection = np.ones(len(text_index[batch_idx]), dtype=bool)
             if is_remove_duplicate:
                 selection[1:] = text_index[batch_idx][1:] != text_index[
-                    batch_idx][:-1]
+                                                                 batch_idx][:-1]
             for ignored_token in ignored_tokens:
                 selection &= text_index[batch_idx] != ignored_token
 

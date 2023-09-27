@@ -73,28 +73,24 @@ def main(config, device, logger, vdl_writer):
     # for rec algorithm
     if hasattr(post_process_class, 'character'):
         char_num = len(getattr(post_process_class, 'character'))
-        if config['Architecture']["algorithm"] in ["Distillation",
-                                                   ]:  # distillation model
+        if config['Architecture']["algorithm"] in ["Distillation", ]:  # distillation model
+            # 蒸馏模式
             for key in config['Architecture']["Models"]:
-                if config['Architecture']['Models'][key]['Head'][
-                        'name'] == 'MultiHead':  # for multi head
-                    if config['PostProcess'][
-                            'name'] == 'DistillationSARLabelDecode':
+                if config['Architecture']['Models'][key]['Head']['name'] == 'MultiHead':  # for multi head
+                    if config['PostProcess']['name'] == 'DistillationSARLabelDecode':
                         char_num = char_num - 2
-                    if config['PostProcess'][
-                            'name'] == 'DistillationNRTRLabelDecode':
+                    if config['PostProcess']['name'] == 'DistillationNRTRLabelDecode':
                         char_num = char_num - 3
+
                     out_channels_list = {}
                     out_channels_list['CTCLabelDecode'] = char_num
                     # update SARLoss params
-                    if list(config['Loss']['loss_config_list'][-1].keys())[
-                            0] == 'DistillationSARLoss':
+                    if list(config['Loss']['loss_config_list'][-1].keys())[0] == 'DistillationSARLoss':
                         config['Loss']['loss_config_list'][-1][
                             'DistillationSARLoss'][
-                                'ignore_index'] = char_num + 1
+                            'ignore_index'] = char_num + 1
                         out_channels_list['SARLabelDecode'] = char_num + 2
-                    elif list(config['Loss']['loss_config_list'][-1].keys())[
-                            0] == 'DistillationNRTRLoss':
+                    elif list(config['Loss']['loss_config_list'][-1].keys())[0] == 'DistillationNRTRLoss':
                         out_channels_list['NRTRLabelDecode'] = char_num + 3
 
                     config['Architecture']['Models'][key]['Head'][
@@ -102,8 +98,8 @@ def main(config, device, logger, vdl_writer):
                 else:
                     config['Architecture']["Models"][key]["Head"][
                         'out_channels'] = char_num
-        elif config['Architecture']['Head'][
-                'name'] == 'MultiHead':  # for multi head
+        elif config['Architecture']['Head']['name'] == 'MultiHead':  # for multi head
+            # 多头
             if config['PostProcess']['name'] == 'SARLabelDecode':
                 char_num = char_num - 2
             if config['PostProcess']['name'] == 'NRTRLabelDecode':
@@ -112,7 +108,7 @@ def main(config, device, logger, vdl_writer):
             out_channels_list['CTCLabelDecode'] = char_num
             # update SARLoss params
             if list(config['Loss']['loss_config_list'][1].keys())[
-                    0] == 'SARLoss':
+                0] == 'SARLoss':
                 if config['Loss']['loss_config_list'][1]['SARLoss'] is None:
                     config['Loss']['loss_config_list'][1]['SARLoss'] = {
                         'ignore_index': char_num + 1
@@ -121,8 +117,7 @@ def main(config, device, logger, vdl_writer):
                     config['Loss']['loss_config_list'][1]['SARLoss'][
                         'ignore_index'] = char_num + 1
                 out_channels_list['SARLabelDecode'] = char_num + 2
-            elif list(config['Loss']['loss_config_list'][1].keys())[
-                    0] == 'NRTRLoss':
+            elif list(config['Loss']['loss_config_list'][1].keys())[0] == 'NRTRLoss':
                 out_channels_list['NRTRLabelDecode'] = char_num + 3
             config['Architecture']['Head'][
                 'out_channels_list'] = out_channels_list
@@ -136,15 +131,18 @@ def main(config, device, logger, vdl_writer):
 
     use_sync_bn = config["Global"].get("use_sync_bn", False)
     if use_sync_bn:
+        # 将模型中的BatchNormalization层替换为适用于分布式训练的 SyncBatchNormalization 层
         model = paddle.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         logger.info('convert_sync_batchnorm')
 
     model = apply_to_static(model, config, logger)
 
     # build loss
+    # 构建损失函数
     loss_class = build_loss(config['Loss'])
 
     # build optim
+    # 构建优化器，学习率衰减器
     optimizer, lr_scheduler = build_optimizer(
         config['Optimizer'],
         epochs=config['Global']['epoch_num'],
@@ -152,6 +150,7 @@ def main(config, device, logger, vdl_writer):
         model=model)
 
     # build metric
+    # 构建性能评估度量器
     eval_class = build_metric(config['Metric'])
 
     logger.info('train dataloader has {} iters'.format(len(train_dataloader)))
@@ -159,6 +158,8 @@ def main(config, device, logger, vdl_writer):
         logger.info('valid dataloader has {} iters'.format(
             len(valid_dataloader)))
 
+    # 配置自动混合精度（Automatic Mixed Precision）
+    # 目标是提高深度神经网络的训练速度和效率，同时保持模型的数值稳定性和精度。
     use_amp = config["Global"].get("use_amp", False)
     amp_level = config["Global"].get("amp_level", 'O2')
     amp_dtype = config["Global"].get("amp_dtype", 'float16')
@@ -172,6 +173,7 @@ def main(config, device, logger, vdl_writer):
                 'FLAGS_gemm_use_half_precision_compute_type': 0,
             })
         paddle.set_flags(AMP_RELATED_FLAGS_SETTING)
+        # 损失函数缩放因子，用于混合精度训练
         scale_loss = config["Global"].get("scale_loss", 1.0)
         use_dynamic_loss_scaling = config["Global"].get(
             "use_dynamic_loss_scaling", False)
@@ -189,12 +191,16 @@ def main(config, device, logger, vdl_writer):
         scaler = None
 
     # load pretrain model
+    # 加载预训练模型
     pre_best_model_dict = load_model(config, model, optimizer,
                                      config['Architecture']["model_type"])
 
     if config['Global']['distributed']:
+        # 分布式训练
         model = paddle.DataParallel(model)
+
     # start train
+    # 开始训练
     program.train(config, train_dataloader, valid_dataloader, device, model,
                   loss_class, optimizer, lr_scheduler, post_process_class,
                   eval_class, pre_best_model_dict, logger, vdl_writer, scaler,

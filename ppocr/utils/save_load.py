@@ -55,6 +55,7 @@ def load_model(config, model, optimizer=None, model_type='det'):
     pretrained_model = global_config.get('pretrained_model')
     best_model_dict = {}
     is_float16 = False
+    # 是否NLP模型
     is_nlp_model = model_type == 'kie' and config["Architecture"][
         "algorithm"] not in ["SDMGR"]
 
@@ -72,6 +73,7 @@ def load_model(config, model, optimizer=None, model_type='det'):
                         f, encoding='latin1')
                 best_model_dict = states_dict.get('best_model_dict', {})
                 if 'epoch' in states_dict:
+                    # 标记下一轮开始的迭代数（epoch）
                     best_model_dict['start_epoch'] = states_dict['epoch'] + 1
             logger.info("resume from {}".format(checkpoints))
 
@@ -95,6 +97,7 @@ def load_model(config, model, optimizer=None, model_type='det'):
             "The {}.pdparams does not exists!".format(checkpoints)
 
         # load params from trained model
+        # 加载模型参数
         params = paddle.load(checkpoints + '.pdparams')
         state_dict = model.state_dict()
         new_state_dict = {}
@@ -134,6 +137,7 @@ def load_model(config, model, optimizer=None, model_type='det'):
                     f, encoding='latin1')
             best_model_dict = states_dict.get('best_model_dict', {})
             if 'epoch' in states_dict:
+                # 标记下一轮开始的迭代数（epoch）
                 best_model_dict['start_epoch'] = states_dict['epoch'] + 1
         logger.info("resume from {}".format(checkpoints))
     elif pretrained_model:

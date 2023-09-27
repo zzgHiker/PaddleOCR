@@ -109,7 +109,7 @@ class MainWindow(QMainWindow):
 
         if os.path.exists('./data/paddle.png'):
             result = self.ocr.ocr('./data/paddle.png', cls=True, det=True)
-            result = self.table_ocr('./data/paddle.png', return_ocr_result_in_table=True)
+            # result = self.table_ocr('./data/paddle.png', return_ocr_result_in_table=True)
 
         # For loading all image under a directory
         self.mImgList = []
@@ -1422,7 +1422,9 @@ class MainWindow(QMainWindow):
     def scrollRequest(self, delta, orientation):
         units = - delta / (8 * 15)
         bar = self.scrollBars[orientation]
-        bar.setValue(bar.value() + bar.singleStep() * units)
+        # Bug fix: setValue只允许接收int型参数
+        # units可能是float型，计算结果需要做类型转换
+        bar.setValue(bar.value() + int(bar.singleStep() * units))
 
     def setZoom(self, value):
         self.actions.fitWidth.setChecked(False)
