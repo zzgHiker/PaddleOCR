@@ -14,7 +14,7 @@
 
 from setuptools import setup
 from io import open
-from paddleocr import VERSION
+from meta import VERSION
 
 def load_requirements(file_list=None):
     if file_list is None:
