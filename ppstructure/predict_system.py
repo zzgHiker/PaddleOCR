@@ -156,7 +156,7 @@ class StructureSystem(object):
                         ]
                         res = []
                         for box, rec_res in zip(filter_boxes, filter_rec_res):
-                            rec_str, rec_conf = rec_res
+                            rec_str, rec_conf = rec_res[0], rec_res[1]
                             for token in style_token:
                                 if token in rec_str:
                                     rec_str = rec_str.replace(token, '')
@@ -165,7 +165,9 @@ class StructureSystem(object):
                             res.append({
                                 'text': rec_str,
                                 'confidence': float(rec_conf),
-                                'text_region': box.tolist()
+                                'text_region': box.tolist(),
+                                # 返回结果添加字符位置信息
+                                'char_pos': rec_res[2] if len(rec_res) == 3 else []
                             })
                 res_list.append({
                     'type': region['label'].lower(),
@@ -199,7 +201,7 @@ def save_structure_res(res, save_folder, img_name, img_idx=0):
             f.write('{}\n'.format(json.dumps(region)))
 
             if region['type'].lower() == 'table' and len(region[
-                    'res']) > 0 and 'html' in region['res']:
+                                                             'res']) > 0 and 'html' in region['res']:
                 excel_path = os.path.join(
                     excel_save_folder,
                     '{}_{}.xlsx'.format(region['bbox'], img_idx))

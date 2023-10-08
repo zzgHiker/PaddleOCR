@@ -679,9 +679,7 @@ class PaddleOCR(predict_system.TextSystem):
             # 检测+识别
             ocr_res = []
             for idx, img in enumerate(imgs):
-                print("shape 1", img.shape)
                 img = preprocess_image(img)
-                print("shape 2", img.shape)
                 dt_boxes, rec_res, _ = self.__call__(img, cls)
                 if not dt_boxes and not rec_res:
                     ocr_res.append(None)
@@ -841,11 +839,11 @@ def main():
                         if w > h:
                             # 水平方向，计算垂直中心位置 center_y
                             arr_c_y = np.linspace(np.mean([box[0][1], box[3][1]]), np.mean([box[1][1], box[2][1]]),
-                                              len(char_pos))
+                                                  len(char_pos))
                         else:
                             # 垂直方向，计算水平中心位置 center_x
                             arr_c_x = np.linspace(np.mean([box[0][0], box[1][0]]), np.mean([box[2][0], box[3][0]]),
-                                              len(char_pos))
+                                                  len(char_pos))
 
                         for i, p in enumerate(char_pos):
                             center_x = left + p if w > h else int(arr_c_x[i])
@@ -893,8 +891,31 @@ def main():
                 logger.info('processing {}/{} page:'.format(index + 1,
                                                             len(img_paths)))
                 new_img_name = os.path.basename(new_img_path).split('.')[0]
-                result = engine(img, img_idx=index)
+                # 表格识别结果返回ocr结果
+                result = engine(img, return_ocr_result_in_table=True, img_idx=index)
                 save_structure_res(result, args.output, img_name, index)
+
+                # 可视化识别结果
+                pil_img = Image.open(new_img_path)
+                drawer = ImageDraw(pil_img)
+
+                for block in result:
+                    if block["type"] == "table":
+                        block_bbox = block["bbox"]
+                        cell_bbox = block["res"]["cell_bbox"]
+                        rec_bbox = block["res"]["boxes"]
+                        rec_res = block["res"]["rec_res"]
+
+                        for i, bbox in enumerate(cell_bbox):
+                            drawer.rectangle((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1], bbox[4] + block_bbox[0],
+                                              bbox[5] + block_bbox[1]), outline="blue")
+
+                        for i, bbox in enumerate(rec_bbox):
+                            drawer.rectangle((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1], bbox[2] + block_bbox[0],
+                                              bbox[3] + block_bbox[1]), outline="red")
+                            drawer.text((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1]), str(i), fill="red")
+
+                pil_img.show()
 
                 if args.recovery and result != []:
                     from copy import deepcopy

@@ -27,31 +27,35 @@ def distance(box_1, box_2):
 
 def compute_iou(rec1, rec2):
     """
-    computing IoU
-    :param rec1: (y0, x0, y1, x1), which reflects
-            (top, left, bottom, right)
-    :param rec2: (y0, x0, y1, x1)
+    计算交并比（IoU）
+    :param rec1: (x0, y0, x1, y1), which reflects
+            (left, top, right, bottom)
+    :param rec2: (x0, y0, x1, y1)
     :return: scala value of IoU
     """
-    # computing area of each rectangles
-    S_rec1 = (rec1[2] - rec1[0]) * (rec1[3] - rec1[1])
-    S_rec2 = (rec2[2] - rec2[0]) * (rec2[3] - rec2[1])
+    # 提取两个边界框的坐标
+    x1_0, y1_0, x1_1, y1_1 = rec1
+    x2_0, y2_0, x2_1, y2_1 = rec2
 
-    # computing the sum_area
-    sum_area = S_rec1 + S_rec2
+    # 计算两个边界框的面积
+    s1 = (x1_1 - x1_0) * (y1_1 - y1_0)
+    s2 = (x2_1 - x2_0) * (y2_1 - y2_0)
+    sum_area = s1 + s2
 
-    # find the each edge of intersect rectangle
-    left_line = max(rec1[1], rec2[1])
-    right_line = min(rec1[3], rec2[3])
-    top_line = max(rec1[0], rec2[0])
-    bottom_line = min(rec1[2], rec2[2])
+    # 计算交集矩形的坐标
+    left_line = max(x1_0, x2_0)
+    right_line = min(x1_1, x2_1)
+    top_line = max(y1_0, y2_0)
+    bottom_line = min(y1_1, y2_1)
 
-    # judge if there is an intersect
+    # 判断是否存在交集
     if left_line >= right_line or top_line >= bottom_line:
+        # 没有交集
         return 0.0
     else:
         intersect = (right_line - left_line) * (bottom_line - top_line)
-        return (intersect / (sum_area - intersect)) * 1.0
+        # 计算rec1有多少区域和rec2重合
+        return (intersect / s1) * 1.0
 
 
 class TableMatch:
@@ -106,7 +110,7 @@ class TableMatch:
                 if td_index in matched_index.keys():
                     b_with = False
                     if '<b>' in ocr_contents[matched_index[td_index][
-                            0]] and len(matched_index[td_index]) > 1:
+                        0]] and len(matched_index[td_index]) > 1:
                         b_with = True
                         end_html.extend('<b>')
                     for i, td_index_index in enumerate(matched_index[td_index]):
@@ -123,7 +127,7 @@ class TableMatch:
                             if len(content) == 0:
                                 continue
                             if i != len(matched_index[
-                                    td_index]) - 1 and ' ' != content[-1]:
+                                            td_index]) - 1 and ' ' != content[-1]:
                                 content += ' '
                         end_html.extend(content)
                     if b_with:
@@ -147,7 +151,7 @@ class TableMatch:
                 b_with = False
                 if td_index in matched_index.keys():
                     if '<b>' in ocr_contents[matched_index[td_index][
-                            0]] and len(matched_index[td_index]) > 1:
+                        0]] and len(matched_index[td_index]) > 1:
                         b_with = True
                     for i, td_index_index in enumerate(matched_index[td_index]):
                         content = ocr_contents[td_index_index][0]
@@ -163,7 +167,7 @@ class TableMatch:
                             if len(content) == 0:
                                 continue
                             if i != len(matched_index[
-                                    td_index]) - 1 and ' ' != content[-1]:
+                                            td_index]) - 1 and ' ' != content[-1]:
                                 content += ' '
                         txt += content
                 if b_with:
