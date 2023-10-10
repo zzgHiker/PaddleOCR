@@ -78,6 +78,63 @@ def area_of(left_top, right_bottom):
     return hw[..., 0] * hw[..., 1]
 
 
+def is_union(rect1, rect2):
+    # 计算两个矩形的交集
+    x1 = max(rect1[0], rect2[0])
+    y1 = max(rect1[1], rect2[1])
+    x2 = min(rect1[2], rect2[2])
+    y2 = min(rect1[3], rect2[3])
+
+    # 计算交集的面积
+    intersection_area = max(0, x2 - x1 + 1) * max(0, y2 - y1 + 1)
+
+    # 计算两个矩形的并集的面积
+    area1 = (rect1[2] - rect1[0] + 1) * (rect1[3] - rect1[1] + 1)
+    area2 = (rect2[2] - rect2[0] + 1) * (rect2[3] - rect2[1] + 1)
+    union_area = area1 + area2 - intersection_area
+
+    # 计算IoU
+    iou = intersection_area / union_area
+    print("iou", iou)
+    return iou > 0
+
+
+def merge_union_boxes(boxes):
+    """将相连Box合并起来"""
+
+    def merge_boxes(rect1, rect2):
+        """计算合并后的矩形坐标"""
+        x1 = min(rect1[0], rect2[0])
+        y1 = min(rect1[1], rect2[1])
+        x2 = max(rect1[2], rect2[2])
+        y2 = max(rect1[3], rect2[3])
+
+        return [x1, y1, x2, y2]
+
+    # 合并后的Box集合
+    union_boxes = []
+    # 已处理的
+    done_indexes = []
+    for i, box1 in enumerate(boxes[:-1]):
+        if i in done_indexes:
+            # 已处理，跳过
+            continue
+
+        # 将相连的Box合并成新的box
+        union_box = box1
+        for j in range(i + 1, len(boxes)):
+            box2 = boxes[j]
+            if is_union(union_box['bbox'], box2['bbox']):
+                # 相连合并
+                done_indexes.append(j)
+                union_box['bbox'] = merge_boxes(union_box['bbox'], box2['bbox'])
+
+        done_indexes.append(i)
+        union_boxes.append(union_box)
+
+    return union_boxes
+
+
 class PicoDetPostProcess(object):
     """
     Args:
@@ -139,8 +196,8 @@ class PicoDetPostProcess(object):
         img_shape = np.array(img.shape[2:], dtype=np.float32)
 
         input_shape = np.array(img).astype('float32').shape[2:]
-        ori_shape = np.array((img_shape, )).astype('float32')
-        scale_factor = np.array((scale_factor, )).astype('float32')
+        ori_shape = np.array((img_shape,)).astype('float32')
+        scale_factor = np.array((scale_factor,)).astype('float32')
         return ori_shape, input_shape, scale_factor
 
     def __call__(self, ori_img, img, preds):
@@ -149,7 +206,6 @@ class PicoDetPostProcess(object):
         reg_max = int(raw_boxes[0].shape[-1] / 4 - 1)
         out_boxes_num = []
         out_boxes_list = []
-        results = []
         ori_shape, input_shape, scale_factor = self.img_info(ori_img, img)
 
         for batch_id in range(batch_size):
@@ -233,7 +289,7 @@ class PicoDetPostProcess(object):
                             np.expand_dims(
                                 np.array(picked_labels),
                                 axis=-1), np.expand_dims(
-                                    picked_box_probs[:, 4], axis=-1),
+                            picked_box_probs[:, 4], axis=-1),
                             picked_box_probs[:, :4]
                         ],
                         axis=1))
@@ -242,9 +298,14 @@ class PicoDetPostProcess(object):
         out_boxes_list = np.concatenate(out_boxes_list, axis=0)
         out_boxes_num = np.asarray(out_boxes_num).astype(np.int32)
 
+        regions = []
         for dt in out_boxes_list:
             clsid, bbox, score = int(dt[0]), dt[2:], dt[1]
             label = self.labels[clsid]
-            result = {'bbox': bbox, 'label': label}
-            results.append(result)
-        return results
+            region = {'bbox': bbox, 'label': label}
+            regions.append(region)
+
+        # 合并相连区域
+        regions = sorted(regions, key=lambda it: it["bbox"][1])
+
+        return merge_union_boxes(regions)

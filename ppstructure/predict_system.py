@@ -58,14 +58,16 @@ class StructureSystem(object):
                 logger.warning(
                     "When args.layout is false, args.ocr is automatically set to false"
                 )
-            args.drop_score = 0
+            # args.drop_score = 0
             # init model
             self.layout_predictor = None
             self.text_system = None
             self.table_system = None
             if args.layout:
+                # 版面分析器
                 self.layout_predictor = LayoutPredictor(args)
                 if args.ocr:
+                    # 文本识别
                     self.text_system = TextSystem(args)
             if args.table:
                 if self.text_system is not None:
@@ -135,7 +137,7 @@ class StructureSystem(object):
                 else:
                     if self.text_system is not None:
                         if self.recovery:
-                            wht_im = np.ones(ori_im.shape, dtype=ori_im.dtype)
+                            wht_im = np.zeros(ori_im.shape, dtype=ori_im.dtype)
                             wht_im[y1:y2, x1:x2, :] = roi_img
                             filter_boxes, filter_rec_res, ocr_time_dict = self.text_system(
                                 wht_im)
