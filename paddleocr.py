@@ -899,21 +899,33 @@ def main():
                 pil_img = Image.open(new_img_path)
                 drawer = ImageDraw(pil_img)
 
-                for block in result:
+                for i, block in enumerate(result):
+                    block_bbox = block["bbox"]
+                    drawer.rectangle(block_bbox, outline="black")
+                    drawer.text((block_bbox[2], block_bbox[1]), block["type"], fill="blue")
+
                     if block["type"] == "table":
-                        block_bbox = block["bbox"]
                         cell_bbox = block["res"]["cell_bbox"]
                         rec_bbox = block["res"]["boxes"]
                         rec_res = block["res"]["rec_res"]
 
-                        for i, bbox in enumerate(cell_bbox):
+                        for j, bbox in enumerate(cell_bbox):
                             drawer.rectangle((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1], bbox[4] + block_bbox[0],
                                               bbox[5] + block_bbox[1]), outline="blue")
 
-                        for i, bbox in enumerate(rec_bbox):
+                        for j, bbox in enumerate(rec_bbox):
                             drawer.rectangle((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1], bbox[2] + block_bbox[0],
                                               bbox[3] + block_bbox[1]), outline="red")
-                            drawer.text((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1]), str(i), fill="red")
+                            drawer.text((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1]), str(j), fill="red")
+                    else:
+                        # rec_bbox = block["res"]["text_region"]
+                        # rec_res = block["res"]["rec_res"]
+                        for j, rec_res in enumerate(block["res"]):
+                            text, conf, bbox = rec_res["text"], rec_res["confidence"], rec_res["text_region"]
+                            drawer.rectangle((bbox[0][0], bbox[0][1], bbox[2][0],
+                                              bbox[2][1]), outline="red")
+                            drawer.text((bbox[0][0], bbox[0][1]), f"{i}_{j}", fill="red")
+                            print(f"{i}_{j}", text, conf)
 
                 pil_img.show()
 
