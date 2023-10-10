@@ -126,6 +126,10 @@ class StructureSystem(object):
             other_img = img.copy()
             has_other = True
             for region in layout_res:
+                # todo: 暂时不处理的类型
+                if region['label'] in ["figure_caption"]:
+                    continue
+
                 res = ''
                 if region['bbox'] is not None:
                     x1, y1, x2, y2 = region['bbox']

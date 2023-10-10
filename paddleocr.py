@@ -910,16 +910,15 @@ def main():
                         rec_res = block["res"]["rec_res"]
 
                         for j, bbox in enumerate(cell_bbox):
-                            drawer.rectangle((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1], bbox[4] + block_bbox[0],
-                                              bbox[5] + block_bbox[1]), outline="blue")
+                            pts = np.array(bbox).reshape((-1, 2)) + np.array(block_bbox[:2])
+                            drawer.polygon([(x, y) for x, y in pts], outline="blue")
 
-                        for j, bbox in enumerate(rec_bbox):
-                            drawer.rectangle((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1], bbox[2] + block_bbox[0],
-                                              bbox[3] + block_bbox[1]), outline="red")
-                            drawer.text((bbox[0] + block_bbox[0], bbox[1] + block_bbox[1]), str(j), fill="red")
+                        for j, (bbox, text) in enumerate(zip(rec_bbox, rec_res)):
+                            pts = np.array(bbox).reshape((-1, 2)) + np.array(block_bbox[:2])
+                            drawer.rectangle((pts[0][0], pts[0][1], pts[1][0], pts[1][1]), outline="red")
+                            drawer.text((pts[0][0], pts[0][1]), f"{i}_{j}", fill="red")
+                            print(f"{i}_{j}", text[0], text[1])
                     else:
-                        # rec_bbox = block["res"]["text_region"]
-                        # rec_res = block["res"]["rec_res"]
                         for j, rec_res in enumerate(block["res"]):
                             text, conf, bbox = rec_res["text"], rec_res["confidence"], rec_res["text_region"]
                             drawer.rectangle((bbox[0][0], bbox[0][1], bbox[2][0],

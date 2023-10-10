@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 
 import numpy as np
 from scipy.special import softmax
@@ -108,20 +109,25 @@ def merge_union_boxes(boxes):
         x2 = max(rect1[2], rect2[2])
         y2 = max(rect1[3], rect2[3])
 
-        return [x1, y1, x2, y2]
+        return np.array([x1, y1, x2, y2])
 
     # 合并后的Box集合
     union_boxes = []
     # 已处理的
     done_indexes = []
-    for i, box1 in enumerate(boxes[:-1]):
+    size = len(boxes)
+    for i, box1 in enumerate(boxes):
         if i in done_indexes:
             # 已处理，跳过
             continue
+        elif i == size - 1:
+            # 最后一个
+            union_boxes.append(copy.deepcopy(box1))
+            break
 
         # 将相连的Box合并成新的box
-        union_box = box1
-        for j in range(i + 1, len(boxes)):
+        union_box = copy.deepcopy(box1)
+        for j in range(i + 1, size):
             box2 = boxes[j]
             if is_union(union_box['bbox'], box2['bbox']):
                 # 相连合并
@@ -306,6 +312,6 @@ class PicoDetPostProcess(object):
 
         # 从上到下排序
         regions = sorted(regions, key=lambda it: it["bbox"][1])
-        
         # 合并相连区域后输出
-        return merge_union_boxes(regions)
+        merged_regions = merge_union_boxes(regions)
+        return merged_regions
