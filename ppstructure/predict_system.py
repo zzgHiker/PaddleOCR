@@ -43,6 +43,8 @@ class StructureSystem(object):
     def __init__(self, args):
         self.mode = args.mode
         self.recovery = args.recovery
+        # 保存参数信息
+        self.args = args
 
         self.image_orientation_predictor = None
         if args.image_orientation:
@@ -110,26 +112,40 @@ class StructureSystem(object):
             time_dict['image_orientation'] = toc - tic
         if self.mode == 'structure':
             ori_im = img.copy()
+            # 图片的高和宽
+            h, w = ori_im.shape[:2]
             if self.layout_predictor is not None:
+                # 进行版面推理分析
                 layout_res, elapse = self.layout_predictor(img)
                 time_dict['layout'] += elapse
             else:
-                h, w = ori_im.shape[:2]
+                # 不进行版面分析，整个页面当作表格处理
                 layout_res = [dict(bbox=None, label='table')]
             res_list = []
+
+            other_img = img.copy()
+            has_other = True
             for region in layout_res:
                 res = ''
                 if region['bbox'] is not None:
                     x1, y1, x2, y2 = region['bbox']
-                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    # 为了后续更好的识别，向外延伸5个单位
+                    x1, y1, x2, y2 = max(0, int(x1) - 5), max(0, int(y1) - 5), min(w, int(x2)) + 5, min(h, int(y2) + 5)
                     roi_img = ori_im[y1:y2, x1:x2, :]
                 else:
+                    has_other = False
                     x1, y1, x2, y2 = 0, 0, w, h
                     roi_img = ori_im
+
+                # 从图片中移除已识别区域
+                other_img[y1:y2, x1:x2, :] = 255
+
                 if region['label'] == 'table':
                     if self.table_system is not None:
                         res, table_time_dict = self.table_system(
                             roi_img, return_ocr_result_in_table)
+
+                        # 统计检测+时间耗时
                         time_dict['table'] += table_time_dict['table']
                         time_dict['table_match'] += table_time_dict['match']
                         time_dict['det'] += table_time_dict['det']
@@ -137,40 +153,21 @@ class StructureSystem(object):
                 else:
                     if self.text_system is not None:
                         if self.recovery:
-                            wht_im = np.zeros(ori_im.shape, dtype=ori_im.dtype)
+                            # 恢复版面，除了需要识别的区域，其他区域置白
+                            wht_im = np.ones(ori_im.shape, dtype=ori_im.dtype) * 255
                             wht_im[y1:y2, x1:x2, :] = roi_img
                             filter_boxes, filter_rec_res, ocr_time_dict = self.text_system(
                                 wht_im)
                         else:
                             filter_boxes, filter_rec_res, ocr_time_dict = self.text_system(
                                 roi_img)
+
+                        # 统计检测+时间耗时
                         time_dict['det'] += ocr_time_dict['det']
                         time_dict['rec'] += ocr_time_dict['rec']
 
-                        # remove style char,
-                        # when using the recognition model trained on the PubtabNet dataset,
-                        # it will recognize the text format in the table, such as <b>
-                        style_token = [
-                            '<strike>', '<strike>', '<sup>', '</sub>', '<b>',
-                            '</b>', '<sub>', '</sup>', '<overline>',
-                            '</overline>', '<underline>', '</underline>', '<i>',
-                            '</i>'
-                        ]
-                        res = []
-                        for box, rec_res in zip(filter_boxes, filter_rec_res):
-                            rec_str, rec_conf = rec_res[0], rec_res[1]
-                            for token in style_token:
-                                if token in rec_str:
-                                    rec_str = rec_str.replace(token, '')
-                            if not self.recovery:
-                                box += [x1, y1]
-                            res.append({
-                                'text': rec_str,
-                                'confidence': float(rec_conf),
-                                'text_region': box.tolist(),
-                                # 返回结果添加字符位置信息
-                                'char_pos': rec_res[2] if len(rec_res) == 3 else []
-                            })
+                        res = postprocess_rec_res(filter_boxes, filter_rec_res, self.recovery, (x1, y1))
+
                 res_list.append({
                     'type': region['label'].lower(),
                     'bbox': [x1, y1, x2, y2],
@@ -178,6 +175,25 @@ class StructureSystem(object):
                     'res': res,
                     'img_idx': img_idx
                 })
+
+            if has_other:
+                # 对版面分析未识别到的区域进行OCR识别
+                filter_boxes, filter_rec_res, ocr_time_dict = self.text_system(
+                    other_img)
+
+                # 统计检测+时间耗时
+                time_dict['det'] += ocr_time_dict['det']
+                time_dict['rec'] += ocr_time_dict['rec']
+
+                res = postprocess_rec_res(filter_boxes, filter_rec_res, self.recovery, (0, 0))
+                res_list.append({
+                    'type': 'other',
+                    'bbox': [0, 0, w, h],
+                    'img': other_img,
+                    'res': res,
+                    'img_idx': img_idx
+                })
+
             end = time.time()
             time_dict['all'] = end - start
             return res_list, time_dict
@@ -187,6 +203,35 @@ class StructureSystem(object):
             time_dict['all'] = elapse
             return re_res[0], time_dict
         return None, None
+
+
+def postprocess_rec_res(filter_boxes, filter_rec_res, recovery=False, offset=(0, 0)):
+    # remove style char,
+    # when using the recognition model trained on the PubtabNet dataset,
+    # it will recognize the text format in the table, such as <b>
+    style_token = [
+        '<strike>', '<strike>', '<sup>', '</sub>', '<b>',
+        '</b>', '<sub>', '</sup>', '<overline>',
+        '</overline>', '<underline>', '</underline>', '<i>',
+        '</i>'
+    ]
+    res = []
+    for box, rec_res in zip(filter_boxes, filter_rec_res):
+        rec_str, rec_conf = rec_res[0], rec_res[1]
+        for token in style_token:
+            if token in rec_str:
+                rec_str = rec_str.replace(token, '')
+        if not recovery:
+            box += [offset[0], offset[1]]
+        res.append({
+            'text': rec_str,
+            'confidence': float(rec_conf),
+            'text_region': box.tolist(),
+            # 返回结果添加字符位置信息
+            'char_pos': rec_res[2] if len(rec_res) == 3 else []
+        })
+
+    return res
 
 
 def save_structure_res(res, save_folder, img_name, img_idx=0):

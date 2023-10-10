@@ -95,7 +95,6 @@ def is_union(rect1, rect2):
 
     # 计算IoU
     iou = intersection_area / union_area
-    print("iou", iou)
     return iou > 0
 
 
@@ -305,7 +304,8 @@ class PicoDetPostProcess(object):
             region = {'bbox': bbox, 'label': label}
             regions.append(region)
 
-        # 合并相连区域
+        # 从上到下排序
         regions = sorted(regions, key=lambda it: it["bbox"][1])
-
+        
+        # 合并相连区域后输出
         return merge_union_boxes(regions)
