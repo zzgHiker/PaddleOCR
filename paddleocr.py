@@ -899,27 +899,29 @@ def main():
                 pil_img = Image.open(new_img_path)
                 drawer = ImageDraw(pil_img)
 
-                for i, block in enumerate(result):
-                    block_bbox = block["bbox"]
-                    drawer.rectangle(block_bbox, outline="black")
-                    drawer.text((block_bbox[2], block_bbox[1]), block["type"], fill="blue")
+                for i, region in enumerate(result):
+                    region_bbox = region["bbox"]
+                    drawer.rectangle(region_bbox, outline="black")
+                    drawer.text((region_bbox[2], region_bbox[1]), region["type"], fill="blue")
 
-                    if block["type"] == "table":
-                        cell_bbox = block["res"]["cell_bbox"]
-                        rec_bbox = block["res"]["boxes"]
-                        rec_res = block["res"]["rec_res"]
+                    if region["type"] == "table":
+                        cell_bbox = region["res"]["cell_bbox"]
+                        rec_bbox = region["res"]["boxes"]
+                        rec_res = region["res"]["rec_res"]
+                        table_size = region["res"]["size"]
+                        print("table size", table_size)
 
                         for j, bbox in enumerate(cell_bbox):
-                            pts = np.array(bbox).reshape((-1, 2)) + np.array(block_bbox[:2])
+                            pts = np.array(bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
                             drawer.polygon([(x, y) for x, y in pts], outline="blue")
 
                         for j, (bbox, text) in enumerate(zip(rec_bbox, rec_res)):
-                            pts = np.array(bbox).reshape((-1, 2)) + np.array(block_bbox[:2])
+                            pts = np.array(bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
                             drawer.rectangle((pts[0][0], pts[0][1], pts[1][0], pts[1][1]), outline="red")
                             drawer.text((pts[0][0], pts[0][1]), f"{i}_{j}", fill="red")
                             print(f"{i}_{j}", text[0], text[1])
                     else:
-                        for j, rec_res in enumerate(block["res"]):
+                        for j, rec_res in enumerate(region["res"]):
                             text, conf, bbox = rec_res["text"], rec_res["confidence"], rec_res["text_region"]
                             drawer.rectangle((bbox[0][0], bbox[0][1], bbox[2][0],
                                               bbox[2][1]), outline="red")

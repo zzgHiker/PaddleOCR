@@ -55,6 +55,27 @@ def expand(pix, det_box, shape):
     return x0_, y0_, x1_, y1_
 
 
+def cal_table_size(table_structure):
+    """计算表结构尺寸"""
+    if table_structure is None:
+        return [0, 0]
+
+    max_rows_count = 0
+    max_cols_count = 0
+    cols_count = 0
+    for tag in table_structure:
+        if "</td>" in tag:
+            cols_count += 1
+
+        if "</tr>" in tag:
+            max_rows_count += 1
+            max_cols_count = max(max_cols_count, cols_count)
+            cols_count = 0
+
+    # 返回表结构尺寸[rows, cols]
+    return [max_rows_count, max_cols_count]
+
+
 class TableSystem(object):
     def __init__(self, args, text_detector=None, text_recognizer=None):
         self.args = args
@@ -84,6 +105,8 @@ class TableSystem(object):
         time_dict = {'det': 0, 'rec': 0, 'table': 0, 'all': 0, 'match': 0}
         start = time.time()
         structure_res, elapse = self._structure(copy.deepcopy(img))
+        # 添加表结构尺寸 [行数, 列数]
+        result['size'] = cal_table_size(structure_res[0])
         result['cell_bbox'] = structure_res[1].tolist()
         time_dict['table'] = elapse
 
@@ -187,7 +210,7 @@ def main(args):
         logger.info("Predict time : {:.3f}s".format(elapse))
 
         if len(pred_res['cell_bbox']) > 0 and len(pred_res['cell_bbox'][
-                0]) == 4:
+                                                      0]) == 4:
             img = predict_strture.draw_rectangle(image_file,
                                                  pred_res['cell_bbox'])
         else:
