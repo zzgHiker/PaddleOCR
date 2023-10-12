@@ -19,11 +19,126 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import copy
+
 import numpy as np
 import cv2
 import paddle
 from shapely.geometry import Polygon
 import pyclipper
+
+
+def cal_area(roi):
+    """计算矩形面积"""
+    w = roi[2] - roi[0]
+    h = roi[3] - roi[1]
+    return max(0, w) * max(0, h)
+
+
+def rect2roi(rect):
+    """
+    矩形坐标   [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    转ROI坐标  [x1, y1, x2, y2]
+    """
+    assert len(rect) in [2, 4]
+
+    if len(rect) == 4:
+        return np.array(rect[::2]).flatten()
+    elif len(rect) == 2:
+        return np.array(rect).flatten()
+
+
+def roi2rect(roi):
+    assert len(roi) == 4
+
+    x1, y1, x2, y2 = roi
+    return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+
+
+def is_union_horizontal(rect1, rect2, thresh=0.5):
+    """判断是否水平相连"""
+    roi_1 = rect2roi(rect1)
+    roi_2 = rect2roi(rect2)
+
+    # 计算两个矩形的交集ROI坐标
+    i_x1 = max(roi_1[0], roi_2[0])
+    i_y1 = max(roi_1[1], roi_2[1])
+    i_x2 = min(roi_1[2], roi_2[2])
+    i_y2 = min(roi_1[3], roi_2[3])
+
+    # 计算交集的面积
+    intersection_area = cal_area([i_x1, i_y1, i_x2, i_y2])
+
+    # 计算两个矩形的并集的面积
+    area1 = cal_area(roi_1)
+    area2 = cal_area(roi_2)
+    union_area = area1 + area2 - intersection_area
+
+    # 计算垂直方向的并集面积
+    v_area_union = cal_area([i_x1, min(roi_1[1], roi_2[1]), i_x2, max(roi_1[3], roi_2[3])])
+
+    # 计算交并比（IoU）
+    iou = intersection_area / union_area
+    # 垂直方向重叠率
+    iov = intersection_area / v_area_union
+
+    return iou > 0 and iov > thresh
+
+
+def merge_union_boxes(boxes):
+    """将相连Box合并起来"""
+
+    def merge_boxes(rect1, rect2):
+        """计算合并后的矩形坐标"""
+        roi_1 = rect2roi(rect1)
+        roi_2 = rect2roi(rect2)
+
+        x1 = min(roi_1[0], roi_2[0])
+        y1 = min(roi_1[1], roi_2[1])
+        x2 = max(roi_1[2], roi_2[2])
+        y2 = max(roi_1[3], roi_2[3])
+
+        return roi2rect([x1, y1, x2, y2])
+
+    # 存放合并后的Box集合
+    union_boxes = []
+    # 存放已处理的Box序号
+    done_indexes = []
+
+    # 按照从上到下，从左到右排序
+    size = len(boxes)
+    for i, box1 in enumerate(boxes):
+        if i in done_indexes:
+            # 已处理，跳过
+            continue
+        elif i == size - 1:
+            # 最后一个
+            union_boxes.append(copy.deepcopy(box1))
+            break
+
+        # 将相连的边界框合并成新的边界框
+        union_box = copy.deepcopy(box1)
+        for j in range(i + 1, size):
+            # 与其他边界框进行比较处理
+            box2 = boxes[j]
+            if is_union_horizontal(union_box, box2):
+                # 相连合并成新边界框
+                done_indexes.append(j)
+                union_box = merge_boxes(union_box, box2)
+
+        for k, box2 in enumerate(union_boxes):
+            # 与已处理的边界框进行比较处理，避免遗漏
+            if is_union_horizontal(union_box, box2):
+                # 和已处理的边界框相连
+                done_indexes.append(i)
+                union_boxes[k] = merge_boxes(union_box, box2)
+
+        if i not in done_indexes:
+            # 将新增合并边界框添加到集合中
+            done_indexes.append(i)
+            union_boxes.append(union_box)
+
+    return union_boxes
 
 
 class DBPostProcess(object):
@@ -239,6 +354,8 @@ class DBPostProcess(object):
             elif self.box_type == 'quad':
                 boxes, scores = self.boxes_from_bitmap(pred[batch_index], mask,
                                                        src_w, src_h)
+                # todo: 合并相连的文本框
+                boxes = merge_union_boxes(boxes)
             else:
                 raise ValueError("box_type can only be one of ['quad', 'poly']")
 
@@ -248,7 +365,7 @@ class DBPostProcess(object):
 
 class DistillationDBPostProcess(object):
     def __init__(self,
-                 model_name=["student"],
+                 model_name=None,
                  key=None,
                  thresh=0.3,
                  box_thresh=0.6,
@@ -258,7 +375,7 @@ class DistillationDBPostProcess(object):
                  score_mode="fast",
                  box_type='quad',
                  **kwargs):
-        self.model_name = model_name
+        self.model_name = model_name if model_name is not None else ["student"]
         self.key = key
         self.post_process = DBPostProcess(
             thresh=thresh,
