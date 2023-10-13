@@ -83,7 +83,16 @@ class StructureSystem(object):
             from ppstructure.kie.predict_kie_token_ser_re import SerRePredictor
             self.kie_predictor = SerRePredictor(args)
 
-    def __call__(self, img, return_ocr_result_in_table=False, img_idx=0):
+    def __call__(self, img,
+                 return_ocr_result_in_table=False,
+                 wl_region_types: list[str] = None,
+                 bl_region_types: list[str] = None, img_idx=0):
+        """
+            文档分析+识别
+            @param return_ocr_result_in_table: 是否需要返回表格OCR结果
+            @param wl_region_types: 需要特别处理的版面类型
+            @param bl_region_types: 不需要特别处理的版面类型（优先级高于 wl_region_types）
+        """
         time_dict = {
             'image_orientation': 0,
             'layout': 0,
@@ -96,6 +105,7 @@ class StructureSystem(object):
         }
         start = time.time()
         if self.image_orientation_predictor is not None:
+            # 方向检测+矫正
             tic = time.time()
             cls_result = self.image_orientation_predictor.predict(
                 input_data=img)
@@ -110,6 +120,7 @@ class StructureSystem(object):
                 img = cv2.rotate(img, cv_rotate_code[angle])
             toc = time.time()
             time_dict['image_orientation'] = toc - tic
+
         if self.mode == 'structure':
             ori_im = img.copy()
             # 图片的高和宽
@@ -126,8 +137,13 @@ class StructureSystem(object):
             other_img = img.copy()
             has_other = True
             for region in layout_res:
-                # todo: 暂时不处理的类型
-                if region['label'] in ["figure_caption"]:
+                region_type = region['label']
+                if bl_region_types is not None and region_type in bl_region_types:
+                    # 跳过不需要特别处理的区域
+                    continue
+
+                if wl_region_types is not None and region_type not in wl_region_types:
+                    # 跳过需要特别处理的区域
                     continue
 
                 res = ''
@@ -144,7 +160,8 @@ class StructureSystem(object):
                 # 从图片中移除已识别区域
                 other_img[y1:y2, x1:x2, :] = 255
 
-                if region['label'] == 'table':
+                if region_type == 'table':
+                    # 表格处理
                     if self.table_system is not None:
                         res, table_time_dict = self.table_system(
                             roi_img, return_ocr_result_in_table)

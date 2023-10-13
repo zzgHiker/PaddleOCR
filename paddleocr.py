@@ -777,10 +777,16 @@ class PPStructure(StructureSystem):
         logger.debug(params)
         super().__init__(params)
 
-    def __call__(self, img, return_ocr_result_in_table=False, img_idx=0):
+    def __call__(self, img,
+                 return_ocr_result_in_table=False,
+                 wl_region_types: list[str] = None,
+                 bl_region_types: list[str] = None, img_idx=0):
+        """
+            文档分析+识别
+        """
         img = check_img(img)
         res, _ = super().__call__(
-            img, return_ocr_result_in_table, img_idx=img_idx)
+            img, return_ocr_result_in_table, wl_region_types, bl_region_types, img_idx)
         return res
 
 
@@ -892,7 +898,9 @@ def main():
                                                             len(img_paths)))
                 new_img_name = os.path.basename(new_img_path).split('.')[0]
                 # 表格识别结果返回ocr结果
-                result = engine(img, return_ocr_result_in_table=True, img_idx=index)
+                result = engine(img, return_ocr_result_in_table=True,
+                                wl_region_types=['table'],
+                                img_idx=index)
                 save_structure_res(result, args.output, img_name, index)
 
                 # 可视化识别结果
