@@ -896,7 +896,6 @@ def main():
             for index, (new_img_path, img) in enumerate(img_paths):
                 logger.info('processing {}/{} page:'.format(index + 1,
                                                             len(img_paths)))
-                new_img_name = os.path.basename(new_img_path).split('.')[0]
                 # 表格识别结果返回ocr结果
                 result = engine(img, return_ocr_result_in_table=True,
                                 wl_region_types=['table'],
@@ -907,6 +906,8 @@ def main():
                 pil_img = Image.open(new_img_path)
                 drawer = ImageDraw(pil_img)
 
+                from ppstructure.table.matcher import TableMatch
+                matcher = TableMatch(filter_ocr_result=True)
                 for i, region in enumerate(result):
                     region_bbox = region["bbox"]
                     drawer.rectangle(region_bbox, outline="black")
@@ -916,25 +917,30 @@ def main():
                         cell_bbox = region["res"]["cell_bbox"]
                         rec_bbox = region["res"]["boxes"]
                         rec_res = region["res"]["rec_res"]
-                        table_size = region["res"]["size"]
-                        print("table size", table_size)
+
+                        # 文本框配备到对应的表格单元格
+                        matched_res = matcher.match_result(rec_bbox, cell_bbox)
 
                         for j, bbox in enumerate(cell_bbox):
-                            pts = np.array(bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
-                            drawer.polygon([(x, y) for x, y in pts], outline="blue")
+                            # 绘制单元格边框
+                            bbox = np.array(bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
+                            drawer.polygon([(x, y) for x, y in bbox], outline="blue")
 
-                        for j, (bbox, text) in enumerate(zip(rec_bbox, rec_res)):
-                            pts = np.array(bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
-                            drawer.rectangle((pts[0][0], pts[0][1], pts[1][0], pts[1][1]), outline="red")
-                            drawer.text((pts[0][0], pts[0][1]), f"{i}_{j}", fill="red")
-                            print(f"{i}_{j}", text[0], text[1])
+                            if j not in matched_res:
+                                # 单元格中没有内容
+                                continue
+
+                            for text_bbox, text in [(rec_bbox[idx], rec_res[idx]) for idx in matched_res[j]]:
+                                text_pts = np.array(text_bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
+                                drawer.rectangle(tuple(text_pts.flatten()), outline="red")
+                                drawer.text(tuple(text_pts[0]), f"{i}_{j}", fill="red")
+                                print(f"cell {i}_{j}", text[0], text[1])
                     else:
                         for j, rec_res in enumerate(region["res"]):
                             text, conf, bbox = rec_res["text"], rec_res["confidence"], rec_res["text_region"]
-                            drawer.rectangle((bbox[0][0], bbox[0][1], bbox[2][0],
-                                              bbox[2][1]), outline="red")
+                            drawer.polygon([(x, y) for x, y in bbox], outline="red")
                             drawer.text((bbox[0][0], bbox[0][1]), f"{i}_{j}", fill="red")
-                            print(f"{i}_{j}", text, conf)
+                            print(f"plain {i}_{j}", text, conf)
 
                 pil_img.show()
 
