@@ -41,7 +41,8 @@ class RecMetric(object):
         correct_num = 0
         all_num = 0
         norm_edit_dis = 0.0
-        for (pred, pred_conf), (target, _) in zip(preds, labels):
+        # 预测结果包含：text, confidence, char_positions
+        for (pred, pred_conf, _), (target, _, _) in zip(preds, labels):
             if self.ignore_space:
                 pred = pred.replace(" ", "")
                 target = target.replace(" ", "")
