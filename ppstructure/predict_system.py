@@ -73,8 +73,10 @@ class StructureSystem(object):
                     self.text_system = TextSystem(args)
             if args.table:
                 if self.text_system is not None:
+                    # 表结构检测
                     self.table_system = TableSystem(
-                        args, self.text_system.text_detector,
+                        args,
+                        self.text_system.text_detector,
                         self.text_system.text_recognizer)
                 else:
                     self.table_system = TableSystem(args)
@@ -260,10 +262,10 @@ def save_structure_res(res, save_folder, img_name, img_idx=0):
     os.makedirs(excel_save_folder, exist_ok=True)
     res_cp = deepcopy(res)
     # save res
-    with open(
-            os.path.join(excel_save_folder, 'res_{}.txt'.format(img_idx)),
-            'w',
-            encoding='utf8') as f:
+    result_file = os.path.join(excel_save_folder,
+                               'res_{}.txt'.format(img_idx))
+    with open(result_file, 'w',
+              encoding='utf8') as f:
         for region in res_cp:
             roi_img = region.pop('img')
             f.write('{}\n'.format(json.dumps(region)))
@@ -279,6 +281,23 @@ def save_structure_res(res, save_folder, img_name, img_idx=0):
                     excel_save_folder,
                     '{}_{}.jpg'.format(region['bbox'], img_idx))
                 cv2.imwrite(img_path, roi_img)
+
+
+def save_kie_res(res, save_folder, img_name, img_idx=0):
+    res_cp = deepcopy(res)
+    result_file = os.path.join(save_folder, img_name,
+                               'res_{}_kie.txt'.format(img_idx))
+    with open(result_file, 'w',
+              encoding='utf8') as f:
+        res_str = '{}\t{}\n'.format(
+            img_name,
+            json.dumps(
+                {
+                    "ocr_info": res_cp
+                }, ensure_ascii=False))
+        f.write(res_str)
+
+        logger.info('result save to {}'.format(result_file))
 
 
 def main(args):
@@ -336,18 +355,8 @@ def main(args):
                     draw_img = draw_ser_results(
                         img, res, font_path=args.vis_font_path)
 
-                with open(
-                        os.path.join(save_folder, img_name,
-                                     'res_{}_kie.txt'.format(index)),
-                        'w',
-                        encoding='utf8') as f:
-                    res_str = '{}\t{}\n'.format(
-                        image_file,
-                        json.dumps(
-                            {
-                                "ocr_info": res
-                            }, ensure_ascii=False))
-                    f.write(res_str)
+                save_kie_res(res, save_folder, img_name, index)
+
             if res != []:
                 cv2.imwrite(img_save_path, draw_img)
                 logger.info('result save to {}'.format(img_save_path))

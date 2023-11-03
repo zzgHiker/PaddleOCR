@@ -49,9 +49,10 @@ from ppocr.utils.logging import get_logger
 from tools.infer import predict_system
 from ppocr.utils.utility import check_and_read, get_image_file_list, alpha_to_color, binarize_img
 from ppocr.utils.network import maybe_download, download_with_progressbar, is_link, confirm_model_dir_url
+from ppocr.utils.visual import draw_ser_results, draw_re_results
 from tools.infer.utility import draw_ocr, str2bool, check_gpu
 from ppstructure.utility import init_args, draw_structure_result
-from ppstructure.predict_system import StructureSystem, save_structure_res, to_excel
+from ppstructure.predict_system import StructureSystem, save_structure_res, to_excel, save_kie_res
 
 logger = get_logger()
 __all__ = [
@@ -725,7 +726,10 @@ class PPStructure(StructureSystem):
         assert params.structure_version in SUPPORT_STRUCTURE_MODEL_VERSION, "structure_version must in {}, but get {}".format(
             SUPPORT_STRUCTURE_MODEL_VERSION, params.structure_version)
         params.use_gpu = check_gpu(params.use_gpu)
-        params.mode = 'structure'
+
+        if params.mode is None:
+            # 默认模式，支持其他模式：kie
+            params.mode = 'structure'
 
         if not params.show_log:
             logger.setLevel(logging.INFO)
@@ -783,6 +787,9 @@ class PPStructure(StructureSystem):
                  bl_region_types: list[str] = None, img_idx=0):
         """
             文档分析+识别
+            @param return_ocr_result_in_table: 是否需要返回表格OCR结果
+            @param wl_region_types: 需要特别处理的版面类型
+            @param bl_region_types: 不需要特别处理的版面类型（优先级高于 wl_region_types）
         """
         img = check_img(img)
         res, _ = super().__call__(
@@ -861,7 +868,7 @@ def main():
                         logger.info(line)
 
                 pil_img.show()
-        elif args.type == 'structure':
+        elif args.type == 'structure' and args.mode == 'structure':
             img, flag_gif, flag_pdf = check_and_read(img_path)
             if not flag_gif and not flag_pdf:
                 img = cv2.imread(img_path)
@@ -951,8 +958,8 @@ def main():
                     result_cp = deepcopy(result)
                     result_sorted = sorted_layout_boxes(result_cp, w)
                     all_res += result_sorted
-
             if args.recovery and all_res != []:
+                # 将识别结果进行版面恢复，保存为Word档案
                 try:
                     from ppstructure.recovery.recovery_to_doc import convert_info_docx
                     convert_info_docx(img, all_res, args.output, img_name)
@@ -967,6 +974,32 @@ def main():
                 item.pop('res')
                 logger.info(item)
             logger.info('result save to {}'.format(args.output))
+
+        elif args.type == 'structure' and args.mode == 'kie':
+            # KIE（SER / SER + RE）
+            result = engine(img_path)
+            img = cv2.imread(img_path)
+
+            if engine.kie_predictor.predictor is not None:
+                img_save_path = os.path.join(args.output,
+                                             '{}_ser_re.jpg'.format(img_name))
+                draw_img = draw_re_results(
+                    img, result, font_path=args.vis_font_path)
+            else:
+                img_save_path = os.path.join(args.output,
+                                             '{}_ser.jpg'.format(img_name))
+                draw_img = draw_ser_results(
+                    img, result, font_path=args.vis_font_path)
+
+            if result:
+                cv2.imwrite(img_save_path, draw_img)
+                logger.info('result save to {}'.format(img_save_path))
+
+                save_kie_res(result, args.output, img_name, 0)
+
+            # 可视化识别结果
+            pil_img = Image.fromarray(draw_img)
+            pil_img.show()
 
 
 if __name__ == '__main__':
