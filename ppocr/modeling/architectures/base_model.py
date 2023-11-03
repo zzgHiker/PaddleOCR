@@ -96,6 +96,7 @@ class BaseModel(nn.Layer):
             else:
                 y["neck_out"] = x
             final_name = "neck_out"
+
         if self.use_head:
             x = self.head(x, targets=data)
             # for multi head, save ctc neck out for udml
@@ -107,6 +108,7 @@ class BaseModel(nn.Layer):
             else:
                 y["head_out"] = x
             final_name = "head_out"
+
         if self.return_all_feats:
             if self.training:
                 return y

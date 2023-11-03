@@ -55,9 +55,11 @@ def main(config, device, logger, vdl_writer):
         config['Architecture']["Head"]['out_channels'] = len(
             getattr(post_process_class, 'character'))
 
+    # 构建模型网络
     model = build_model(config['Architecture'])
     algorithm = config['Architecture']['algorithm']
 
+    # 加载模型参数
     load_model(config, model)
 
     # create data ops

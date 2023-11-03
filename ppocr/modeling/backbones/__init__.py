@@ -17,6 +17,7 @@ __all__ = ["build_backbone"]
 
 def build_backbone(config, model_type):
     if model_type == "det" or model_type == "table":
+        # 检测模型
         from .det_mobilenet_v3 import MobileNetV3
         from .det_resnet import ResNet
         from .det_resnet_vd import ResNet_vd
@@ -32,6 +33,7 @@ def build_backbone(config, model_type):
             from .table_master_resnet import TableResNetExtra
             support_dict.append('TableResNetExtra')
     elif model_type == "rec" or model_type == "cls":
+        # 识别模型+分类模型
         from .rec_mobilenet_v3 import MobileNetV3
         from .rec_resnet_vd import ResNet
         from .rec_resnet_fpn import ResNetFPN

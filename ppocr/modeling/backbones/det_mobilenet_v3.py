@@ -176,9 +176,12 @@ class ConvBNLayer(nn.Layer):
         self.bn = nn.BatchNorm(num_channels=out_channels, act=None)
 
     def forward(self, x):
+        # 卷积
         x = self.conv(x)
+        # 批量归一化
         x = self.bn(x)
         if self.if_act:
+            # 使用激活函数
             if self.act == "relu":
                 x = F.relu(x)
             elif self.act == "hardswish":

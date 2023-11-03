@@ -199,20 +199,29 @@ class MainWindow(QMainWindow):
 
         # Buttons
         self.editButton = QToolButton()
+
+        # 重新识别按钮
         self.reRecogButton = QToolButton()
         self.reRecogButton.setIcon(newIcon('reRec', 30))
         self.reRecogButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
+        # 表格识别按钮
         self.tableRecButton = QToolButton()
         self.tableRecButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
+        # 矩形标注按钮
         self.newButton = QToolButton()
         self.newButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+
+        # 多点标注按钮
         self.createpolyButton = QToolButton()
         self.createpolyButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 
+        # 确认保存按钮
         self.SaveButton = QToolButton()
         self.SaveButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+
+        # 删除图像按钮
         self.DelButton = QToolButton()
         self.DelButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
 

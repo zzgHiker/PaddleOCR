@@ -110,6 +110,7 @@ def load_model(config, model, optimizer=None, model_type='det'):
             if pre_value.dtype == paddle.float16:
                 is_float16 = True
             if pre_value.dtype != value.dtype:
+                # 类型转换，将预训练参数值转换成模型需要的类型
                 pre_value = pre_value.astype(value.dtype)
             if list(value.shape) == list(pre_value.shape):
                 new_state_dict[key] = pre_value
@@ -124,6 +125,7 @@ def load_model(config, model, optimizer=None, model_type='det'):
             )
         if optimizer is not None:
             if os.path.exists(checkpoints + '.pdopt'):
+                # 加载优化器参数
                 optim_dict = paddle.load(checkpoints + '.pdopt')
                 optimizer.set_state_dict(optim_dict)
             else:

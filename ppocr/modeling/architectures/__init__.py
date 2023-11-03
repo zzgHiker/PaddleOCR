@@ -36,6 +36,10 @@ def build_model(config):
 
 
 def apply_to_static(model, config, logger):
+    """
+    将动态图模型转换成静态图模型
+    支持的算法：DB，SVTR，SVTR_LCNet，TableMaster，LayoutXLM，SLANet
+    """
     if config["Global"].get("to_static", False) is not True:
         return model
     assert "d2s_train_image_shape" in config[
@@ -44,8 +48,10 @@ def apply_to_static(model, config, logger):
         "DB", "SVTR_LCNet", "TableMaster", "LayoutXLM", "SLANet", "SVTR"
     ]
     if config["Architecture"]["algorithm"] in ["Distillation"]:
+        # 蒸馏模型，获取模型算法
         algo = list(config["Architecture"]["Models"].values())[0]["algorithm"]
     else:
+        # 模型算法
         algo = config["Architecture"]["algorithm"]
     assert algo in supported_list, f"algorithms that supports static training must in in {supported_list} but got {algo}"
 
@@ -57,27 +63,25 @@ def apply_to_static(model, config, logger):
     if algo == "SVTR_LCNet":
         specs.append([
             InputSpec(
-                [None, config["Global"]["max_text_length"]],
-                dtype='int64'), InputSpec(
-                    [None, config["Global"]["max_text_length"]], dtype='int64'),
+                [None, config["Global"]["max_text_length"]], dtype='int64'),
             InputSpec(
-                [None], dtype='int64'), InputSpec(
-                    [None], dtype='float64')
+                [None, config["Global"]["max_text_length"]], dtype='int64'),
+            InputSpec(
+                [None], dtype='int64'),
+            InputSpec(
+                [None], dtype='float64')
         ])
     elif algo == "TableMaster":
-        specs.append(
-            [
-                InputSpec(
-                    [None, config["Global"]["max_text_length"]], dtype='int64'),
-                InputSpec(
-                    [None, config["Global"]["max_text_length"], 4],
-                    dtype='float32'),
-                InputSpec(
-                    [None, config["Global"]["max_text_length"], 1],
-                    dtype='float32'),
-                InputSpec(
-                    [None, 6], dtype='float32'),
-            ])
+        specs.append([
+            InputSpec(
+                [None, config["Global"]["max_text_length"]], dtype='int64'),
+            InputSpec(
+                [None, config["Global"]["max_text_length"], 4], dtype='float32'),
+            InputSpec(
+                [None, config["Global"]["max_text_length"], 1], dtype='float32'),
+            InputSpec(
+                [None, 6], dtype='float32'),
+        ])
     elif algo == "LayoutXLM":
         specs = [[
             InputSpec(
@@ -98,11 +102,9 @@ def apply_to_static(model, config, logger):
             InputSpec(
                 [None, config["Global"]["max_text_length"] + 2], dtype='int64'),
             InputSpec(
-                [None, config["Global"]["max_text_length"] + 2, 4],
-                dtype='float32'),
+                [None, config["Global"]["max_text_length"] + 2, 4], dtype='float32'),
             InputSpec(
-                [None, config["Global"]["max_text_length"] + 2, 1],
-                dtype='float32'),
+                [None, config["Global"]["max_text_length"] + 2, 1], dtype='float32'),
             InputSpec(
                 [None, 6], dtype='float64'),
         ])

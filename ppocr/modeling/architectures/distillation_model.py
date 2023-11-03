@@ -46,8 +46,10 @@ class DistillationModel(nn.Layer):
                 pretrained = model_config.pop("pretrained")
             model = BaseModel(model_config)
             if pretrained is not None:
+                # 加载预训练模型
                 load_pretrained_params(model, pretrained)
             if freeze_params:
+                # 冻结参数，不参与训练
                 for param in model.parameters():
                     param.trainable = False
             self.model_list.append(self.add_sublayer(key, model))
