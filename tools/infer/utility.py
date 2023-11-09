@@ -30,8 +30,10 @@ from ppocr.utils.logging import get_logger
 def str2bool(v):
     return v.lower() in ("true", "yes", "t", "y", "1")
 
+
 def str2int_tuple(v):
     return tuple([int(i.strip()) for i in v.split(",")])
+
 
 def init_args():
     parser = argparse.ArgumentParser()
@@ -294,7 +296,7 @@ def get_output_tensors(args, mode, predictor):
     output_names = predictor.get_output_names()
     output_tensors = []
     if mode == "rec" and args.rec_algorithm in [
-            "CRNN", "SVTR_LCNet", "SVTR_HGNet"
+        "CRNN", "SVTR_LCNet", "SVTR_HGNet"
     ]:
         output_name = 'softmax_0.tmp_0'
         if output_name in output_names:
@@ -436,9 +438,9 @@ def draw_ocr_box_txt(image,
 
 def draw_box_txt_fine(img_size, box, txt, font_path="./doc/fonts/simfang.ttf"):
     box_height = int(
-        math.sqrt((box[0][0] - box[3][0])**2 + (box[0][1] - box[3][1])**2))
+        math.sqrt((box[0][0] - box[3][0]) ** 2 + (box[0][1] - box[3][1]) ** 2))
     box_width = int(
-        math.sqrt((box[0][0] - box[1][0])**2 + (box[0][1] - box[1][1])**2))
+        math.sqrt((box[0][0] - box[1][0]) ** 2 + (box[0][1] - box[1][1]) ** 2))
 
     if box_height > 2 * box_width and box_height > 30:
         img_text = Image.new('RGB', (box_height, box_width), (255, 255, 255))
@@ -658,7 +660,10 @@ def get_minarea_rect_crop(img, points):
 
 
 def check_gpu(use_gpu):
-    if use_gpu and not paddle.is_compiled_with_cuda():
+    if use_gpu \
+            and (len(paddle.fluid.cuda_places()) == 0
+                 or not paddle.is_compiled_with_cuda()):
+        # 动态适配：若CUDA设备不存在，则不启用GPU
         use_gpu = False
     return use_gpu
 
