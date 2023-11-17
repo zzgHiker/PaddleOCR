@@ -18,6 +18,10 @@ import importlib
 
 __dir__ = os.path.dirname(__file__)
 
+import time
+
+import uuid
+
 import paddle
 from PIL.ImageDraw import ImageDraw
 
@@ -52,7 +56,7 @@ from ppocr.utils.network import maybe_download, download_with_progressbar, is_li
 from ppocr.utils.visual import draw_ser_results, draw_re_results
 from tools.infer.utility import draw_ocr, str2bool, check_gpu
 from ppstructure.utility import init_args, draw_structure_result
-from ppstructure.predict_system import StructureSystem, save_structure_res, to_excel, save_kie_res
+from ppstructure.predict_system import StructureSystem, save_structure_res, to_excel, save_kie_res, save_crop_image
 
 logger = get_logger()
 __all__ = [
@@ -646,11 +650,11 @@ class PaddleOCR(predict_system.TextSystem):
             alpha_color: set RGB color Tuple for transparent parts replacement. Default is pure white.
         """
         assert isinstance(img, (np.ndarray, list, str, bytes))
-        if isinstance(img, list) and det == True:
+        if isinstance(img, list) and det is True:
             # 检测算法仅支持单一图片
             logger.error('When input a list of images, det must be false')
             exit(0)
-        if cls == True and self.use_angle_cls == False:
+        if cls is True and self.use_angle_cls is False:
             logger.warning(
                 'Since the angle classifier is not initialized, it will not be used during the forward process'
             )
@@ -871,7 +875,8 @@ def main():
         elif args.type == 'structure' and args.mode == 'structure':
             img, flag_gif, flag_pdf = check_and_read(img_path)
             if not flag_gif and not flag_pdf:
-                img = cv2.imread(img_path)
+                img = Image.open(img_path)
+                img = np.array(img)
 
             if args.recovery and args.use_pdf2docx_api and flag_pdf:
                 from pdf2docx.converter import Converter
@@ -925,23 +930,32 @@ def main():
                         rec_bbox = region["res"]["boxes"]
                         rec_res = region["res"]["rec_res"]
 
+                        print('html', region["res"]['html'])
+
+                        # 截取表格区域并保存
+                        save_crop_image(img, region_bbox,
+                                        os.path.join(args.output, 'table'),
+                                        "{}_{}.jpg".format(img_name, time.time_ns()))
+
                         # 文本框配备到对应的表格单元格
                         matched_res = matcher.match_result(rec_bbox, cell_bbox)
 
                         for j, bbox in enumerate(cell_bbox):
                             # 绘制单元格边框
-                            bbox = np.array(bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
+                            bbox = np.array(bbox).reshape((-1, 2))
                             drawer.polygon([(x, y) for x, y in bbox], outline="blue")
+                            drawer.text(bbox[0], f'cell-{j}', fill="blue")
 
                             if j not in matched_res:
                                 # 单元格中没有内容
                                 continue
 
-                            for text_bbox, text in [(rec_bbox[idx], rec_res[idx]) for idx in matched_res[j]]:
-                                text_pts = np.array(text_bbox).reshape((-1, 2)) + np.array(region_bbox[:2])
+                            for text_bbox, text, rec_idx in [(rec_bbox[idx], rec_res[idx], idx) for idx in
+                                                             matched_res[j]]:
+                                text_pts = np.array(text_bbox).reshape((-1, 2))
                                 drawer.rectangle(tuple(text_pts.flatten()), outline="red")
-                                drawer.text(tuple(text_pts[0]), f"{i}_{j}", fill="red")
-                                print(f"cell {i}_{j}", text[0], text[1])
+                                drawer.text(tuple(text_pts[0]), f"{i}_{rec_idx}_{j}", fill="red")
+                                print(f"cell {i}_{rec_idx}_{j}", text[0], text[1])
                     else:
                         for j, rec_res in enumerate(region["res"]):
                             text, conf, bbox = rec_res["text"], rec_res["confidence"], rec_res["text_region"]

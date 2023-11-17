@@ -39,6 +39,16 @@ from ppstructure.utility import parse_args, draw_structure_result
 logger = get_logger()
 
 
+def cal_bbox_by_offset(bbox, offset_xy: tuple[float, float] = (0, 0)):
+    """
+    根据偏移量计算实际bbox
+    """
+    np_bbox = np.array(bbox)
+    original_shape = np_bbox.shape
+
+    return (np_bbox.reshape(-1, 2) + offset_xy).reshape(original_shape).tolist()
+
+
 class StructureSystem(object):
     def __init__(self, args):
         self.mode = args.mode
@@ -149,11 +159,16 @@ class StructureSystem(object):
                     continue
 
                 res = ''
+                offset_xy = (0, 0)
                 if region['bbox'] is not None:
-                    x1, y1, x2, y2 = region['bbox']
-                    # 为了后续更好的识别，向外延伸5个单位
-                    x1, y1, x2, y2 = max(0, int(x1) - 5), max(0, int(y1) - 5), min(w, int(x2)) + 5, min(h, int(y2) + 5)
-                    roi_img = ori_im[y1:y2, x1:x2, :]
+                    # 为了后续更好地识别，向外少量扩展
+                    x1, y1, x2, y2 = (np.array(region['bbox']).astype(int) + [-3, -3, 10, 10]).tolist()
+                    offset_xy = (x1, y1)
+
+                    # 周边填充白底
+                    roi_h, roi_w = y2 - y1, x2 - x1
+                    roi_img = np.ones((roi_h + 5, roi_w + 5, 3), dtype=ori_im.dtype) * 255
+                    roi_img[:roi_h, :roi_w, :] = ori_im[y1:y2, x1:x2, :]
                 else:
                     has_other = False
                     x1, y1, x2, y2 = 0, 0, w, h
@@ -167,6 +182,14 @@ class StructureSystem(object):
                     if self.table_system is not None:
                         res, table_time_dict = self.table_system(
                             roi_img, return_ocr_result_in_table)
+
+                        # 转换实际坐标，加上偏移量
+                        if 'cell_bbox' in res:
+                            # 单元格边框
+                            res['cell_bbox'] = cal_bbox_by_offset(res['cell_bbox'], offset_xy)
+                        if 'boxes' in res:
+                            # 文本行边框
+                            res['boxes'] = cal_bbox_by_offset(res['boxes'], offset_xy)
 
                         # 统计检测+时间耗时
                         time_dict['table'] += table_time_dict['table']
@@ -281,6 +304,12 @@ def save_structure_res(res, save_folder, img_name, img_idx=0):
                     excel_save_folder,
                     '{}_{}.jpg'.format(region['bbox'], img_idx))
                 cv2.imwrite(img_path, roi_img)
+
+
+def save_crop_image(img, bbox, save_folder, img_name):
+    x1, y1, x2, y2 = bbox
+    crop_img = img[y1:y2, x1:x2]
+    cv2.imwrite(os.path.join(save_folder, img_name), crop_img)
 
 
 def save_kie_res(res, save_folder, img_name, img_idx=0):

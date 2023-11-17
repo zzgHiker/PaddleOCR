@@ -17,12 +17,19 @@ from ppstructure.table.table_master_match import deal_eb_token, deal_bb
 
 
 def distance(box_1, box_2):
+    # 计算中心距离
     x1, y1, x2, y2 = box_1
     x3, y3, x4, y4 = box_2
-    dis = abs(x3 - x1) + abs(y3 - y1) + abs(x4 - x2) + abs(y4 - y2)
-    dis_2 = abs(x3 - x1) + abs(y3 - y1)
-    dis_3 = abs(x4 - x2) + abs(y4 - y2)
-    return dis + min(dis_2, dis_3)
+
+    dist_x = abs((x1 + x2) / 2 - (x3 + x4) / 2)
+    dist_y = abs((y1 + y2) / 2 - (y3 + y4) / 2)
+
+    return dist_x + dist_y
+
+    # dis = abs(x3 - x1) + abs(y3 - y1) + abs(x4 - x2) + abs(y4 - y2)
+    # dis_2 = abs(x3 - x1) + abs(y3 - y1)
+    # dis_3 = abs(x4 - x2) + abs(y4 - y2)
+    # return dis + min(dis_2, dis_3)
 
 
 def compute_iou(rec1, rec2):
@@ -77,27 +84,42 @@ class TableMatch:
                                                  rec_res)
         return pred_html
 
-    def match_result(self, dt_boxes, pred_bboxes):
+    def match_result(self, dt_boxes, cell_bboxes):
         matched = {}
+        # 判断每个文本框所属的单元格
         for i, gt_box in enumerate(dt_boxes):
+            # 遍历文本框
             distances = []
-            for j, pred_box in enumerate(pred_bboxes):
-                if len(pred_box) == 8:
-                    pred_box = [
-                        np.min(pred_box[0::2]), np.min(pred_box[1::2]),
-                        np.max(pred_box[0::2]), np.max(pred_box[1::2])
+            for j, cell_box in enumerate(cell_bboxes):
+                # 遍历单元格
+                if len(cell_box) == 8:
+                    # 格式转换：xyxyxyxy --> xyxy
+                    cell_box = [
+                        np.min(cell_box[0::2]), np.min(cell_box[1::2]),
+                        np.max(cell_box[0::2]), np.max(cell_box[1::2])
                     ]
-                distances.append((distance(gt_box, pred_box),
-                                  1. - compute_iou(gt_box, pred_box)
+                distances.append((distance(gt_box, cell_box),
+                                  1. - compute_iou(gt_box, cell_box)
                                   ))  # compute iou and l1 distance
+
             sorted_distances = distances.copy()
             # select det box by iou and l1 distance
             sorted_distances = sorted(
                 sorted_distances, key=lambda item: (item[1], item[0]))
-            if distances.index(sorted_distances[0]) not in matched.keys():
-                matched[distances.index(sorted_distances[0])] = [i]
+
+            # 如果一个文本库部分覆盖到多个单元格，且覆盖面相近时，优先判断距离
+            print(i, sorted_distances[0], sorted_distances[1])
+            prop_cell_idx = distances.index(sorted_distances[0])
+            if len(sorted_distances) > 1 \
+                    and abs(sorted_distances[0][1] - sorted_distances[1][1]) < 0.1:
+                if sorted_distances[0][0] > sorted_distances[1][0]:
+                    prop_cell_idx = distances.index(sorted_distances[1])
+
+            print(f'{i} >> {prop_cell_idx}')
+            if prop_cell_idx not in matched.keys():
+                matched[prop_cell_idx] = [i]
             else:
-                matched[distances.index(sorted_distances[0])].append(i)
+                matched[prop_cell_idx].append(i)
         return matched
 
     def get_pred_html(self, pred_structures, matched_index, ocr_contents):
