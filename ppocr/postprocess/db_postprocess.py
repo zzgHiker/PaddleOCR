@@ -257,14 +257,16 @@ class DBPostProcess(object):
 
             box[:, 0] = np.clip(
                 np.round(box[:, 0] / width * dest_width), 0, dest_width)
+            # 检测框普遍偏下，上移2个像素
             box[:, 1] = np.clip(
-                np.round(box[:, 1] / height * dest_height), 0, dest_height)
+                np.round(box[:, 1] / height * dest_height - 2), 0, dest_height)
             boxes.append(box.astype("int32"))
             scores.append(score)
         return np.array(boxes, dtype="int32"), scores
 
     def unclip(self, box, unclip_ratio):
         poly = Polygon(box)
+        # 根据多边形的面积和 unclip_ratio 计算偏移距离
         distance = poly.area * unclip_ratio / poly.length
         offset = pyclipper.PyclipperOffset()
         offset.AddPath(box, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
