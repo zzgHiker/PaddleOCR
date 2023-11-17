@@ -162,7 +162,8 @@ class StructureSystem(object):
                 offset_xy = (0, 0)
                 if region['bbox'] is not None:
                     # 为了后续更好地识别，向外少量扩展
-                    x1, y1, x2, y2 = (np.array(region['bbox']).astype(int) + [-3, -3, 10, 10]).tolist()
+                    # todo: 后续可提取成参数
+                    x1, y1, x2, y2 = (np.array(region['bbox']).astype(int) + [-5, -3, 10, 10]).tolist()
                     offset_xy = (x1, y1)
 
                     # 周边填充白底
