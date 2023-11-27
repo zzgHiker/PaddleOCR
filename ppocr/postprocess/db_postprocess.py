@@ -35,7 +35,7 @@ def cal_area(roi):
     return max(0, w) * max(0, h)
 
 
-def rect2roi(rect):
+def bbox2rect(rect):
     """
     矩形坐标   [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
     转ROI坐标  [x1, y1, x2, y2]
@@ -48,57 +48,57 @@ def rect2roi(rect):
         return np.array(rect).flatten()
 
 
-def roi2rect(roi):
+def rect2bbox(roi):
     assert len(roi) == 4
 
     x1, y1, x2, y2 = roi
     return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
 
 
-def is_union_horizontal(rect1, rect2, thresh=0.5):
+def is_union_horizontal(bbox_1, bbox_2, thresh=0.5):
     """判断是否水平相连"""
-    roi_1 = rect2roi(rect1)
-    roi_2 = rect2roi(rect2)
+    rect_1 = bbox2rect(bbox_1)
+    rect_2 = bbox2rect(bbox_2)
 
-    # 计算两个矩形的交集ROI坐标
-    i_x1 = max(roi_1[0], roi_2[0])
-    i_y1 = max(roi_1[1], roi_2[1])
-    i_x2 = min(roi_1[2], roi_2[2])
-    i_y2 = min(roi_1[3], roi_2[3])
+    # 计算两个矩形的交集RECT坐标
+    i_x1 = max(rect_1[0], rect_2[0])
+    i_y1 = max(rect_1[1], rect_2[1])
+    i_x2 = min(rect_1[2], rect_2[2])
+    i_y2 = min(rect_1[3], rect_2[3])
 
     # 计算交集的面积
     intersection_area = cal_area([i_x1, i_y1, i_x2, i_y2])
+    v_intersection_area1 = cal_area([i_x1, rect_1[1], i_x2, rect_1[3]])
+    v_intersection_area2 = cal_area([i_x1, rect_2[1], i_x2, rect_2[3]])
 
     # 计算两个矩形的并集的面积
-    area1 = cal_area(roi_1)
-    area2 = cal_area(roi_2)
+    area1 = cal_area(rect_1)
+    area2 = cal_area(rect_2)
     union_area = area1 + area2 - intersection_area
-
-    # 计算垂直方向的并集面积
-    v_area_union = cal_area([i_x1, min(roi_1[1], roi_2[1]), i_x2, max(roi_1[3], roi_2[3])])
 
     # 计算交并比（IoU）
     iou = intersection_area / union_area
     # 垂直方向重叠率
-    iov = intersection_area / v_area_union
-
+    iov = 0
+    if iou > 0:
+        iov = intersection_area / min(v_intersection_area1, v_intersection_area2)
     return iou > 0 and iov > thresh
 
 
 def merge_union_boxes(boxes):
     """将相连Box合并起来"""
 
-    def merge_boxes(rect1, rect2):
+    def merge_boxes(bbox1, bbox2):
         """计算合并后的矩形坐标"""
-        roi_1 = rect2roi(rect1)
-        roi_2 = rect2roi(rect2)
+        rect1 = bbox2rect(bbox1)
+        rect2 = bbox2rect(bbox2)
 
-        x1 = min(roi_1[0], roi_2[0])
-        y1 = min(roi_1[1], roi_2[1])
-        x2 = max(roi_1[2], roi_2[2])
-        y2 = max(roi_1[3], roi_2[3])
+        x1 = min(rect1[0], rect2[0])
+        y1 = min(rect1[1], rect2[1])
+        x2 = max(rect1[2], rect2[2])
+        y2 = max(rect1[3], rect2[3])
 
-        return roi2rect([x1, y1, x2, y2])
+        return rect2bbox([x1, y1, x2, y2])
 
     # 存放合并后的Box集合
     union_boxes = []
@@ -170,10 +170,10 @@ class DBPostProcess(object):
             [[1, 1], [1, 1]])
 
     def polygons_from_bitmap(self, pred, _bitmap, dest_width, dest_height):
-        '''
+        """
         _bitmap: single map with shape (1, H, W),
             whose values are binarized as {0, 1}
-        '''
+        """
 
         bitmap = _bitmap
         height, width = bitmap.shape
@@ -217,10 +217,10 @@ class DBPostProcess(object):
         return boxes, scores
 
     def boxes_from_bitmap(self, pred, _bitmap, dest_width, dest_height):
-        '''
+        """
         _bitmap: single map with shape (1, H, W),
                 whose values are binarized as {0, 1}
-        '''
+        """
 
         bitmap = _bitmap
         height, width = bitmap.shape
@@ -297,9 +297,9 @@ class DBPostProcess(object):
         return box, min(bounding_box[1])
 
     def box_score_fast(self, bitmap, _box):
-        '''
+        """
         box_score_fast: use bbox mean score as the mean score
-        '''
+        """
         h, w = bitmap.shape[:2]
         box = _box.copy()
         xmin = np.clip(np.floor(box[:, 0].min()).astype("int32"), 0, w - 1)

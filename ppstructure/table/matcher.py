@@ -16,8 +16,8 @@ import numpy as np
 from ppstructure.table.table_master_match import deal_eb_token, deal_bb
 
 
-def distance(box_1, box_2):
-    # 计算中心距离
+def distance_center(box_1, box_2):
+    """计算两个边界框的中心距离"""
     x1, y1, x2, y2 = box_1
     x3, y3, x4, y4 = box_2
 
@@ -26,10 +26,31 @@ def distance(box_1, box_2):
 
     return dist_x + dist_y
 
-    # dis = abs(x3 - x1) + abs(y3 - y1) + abs(x4 - x2) + abs(y4 - y2)
-    # dis_2 = abs(x3 - x1) + abs(y3 - y1)
-    # dis_3 = abs(x4 - x2) + abs(y4 - y2)
-    # return dis + min(dis_2, dis_3)
+
+def distance_1d(a, b, c, d):
+    """计算一个维度上的距离"""
+    d1 = max(a, b) - min(a, b)
+    d2 = max(c, d) - min(c, d)
+    d = max(a, b, c, d) - min(a, b, c, d)
+
+    d = d - d1 - d2
+    return 0 if d < 0 else d
+
+
+def distance_boundary(bbox1, bbox2):
+    """
+    计算两个边界框的距离（水平距离+垂直距离）
+    """
+    x1, y1, x2, y2 = bbox1
+    x3, y3, x4, y4 = bbox2
+
+    # 水平距离
+    dist_x = distance_1d(x1, x2, x3, x4)
+
+    # 垂直距离
+    dist_y = distance_1d(y1, y2, y3, y4)
+
+    return dist_x + dist_y
 
 
 def compute_iou(rec1, rec2):
@@ -84,42 +105,66 @@ class TableMatch:
                                                  rec_res)
         return pred_html
 
-    def match_result(self, dt_boxes, cell_bboxes):
+    def match_result(self, dt_bboxes, cell_bboxes):
         matched = {}
-        # 判断每个文本框所属的单元格
-        for i, gt_box in enumerate(dt_boxes):
-            # 遍历文本框
-            distances = []
-            for j, cell_box in enumerate(cell_bboxes):
-                # 遍历单元格
-                if len(cell_box) == 8:
-                    # 格式转换：xyxyxyxy --> xyxy
-                    cell_box = [
-                        np.min(cell_box[0::2]), np.min(cell_box[1::2]),
-                        np.max(cell_box[0::2]), np.max(cell_box[1::2])
-                    ]
-                distances.append((distance(gt_box, cell_box),
-                                  1. - compute_iou(gt_box, cell_box)
-                                  ))  # compute iou and l1 distance
+        text_bbox_group = []
 
-            sorted_distances = distances.copy()
-            # select det box by iou and l1 distance
+        # 将相邻的文本框分组
+        for i, bbox1 in enumerate(dt_bboxes):
+            is_union = False
+            for ids, bboxes in text_bbox_group:
+                for bbox in bboxes:
+                    if distance_boundary(bbox1, bbox) < 2:
+                        # 紧邻的文本分到一组，大概率是在同一单元格中
+                        ids.append(i)
+                        bboxes.append(bbox1)
+                        is_union = True
+                        break
+                if is_union:
+                    break
+
+            if not is_union:
+                # 没有找到相邻的文本框，单独一组
+                text_bbox_group.append([[i], [bbox1]])
+
+        for ids, bboxes in text_bbox_group:
+            np_bbox = np.array(bboxes).astype(int).flatten()
+            union_bbox = [min(np_bbox[::2]), min(np_bbox[1::2]),
+                          max(np_bbox[::2]), max(np_bbox[1::2])]
+
+            distances = []
+            for cell_index, cell_bbox in enumerate(cell_bboxes):
+                # 遍历单元格
+                if len(cell_bbox) == 8:
+                    # 格式转换：xyxyxyxy --> xyxy
+                    cell_bbox = [min(cell_bbox[0::2]), min(cell_bbox[1::2]),
+                                 max(cell_bbox[0::2]), max(cell_bbox[1::2])]
+
+                # 计算IOU和距离
+                distances.append((distance_boundary(union_bbox, cell_bbox),
+                                  1. - compute_iou(union_bbox, cell_bbox)
+                                  ))
+
+            # 按照IOU和距离进行排序
             sorted_distances = sorted(
-                sorted_distances, key=lambda item: (item[1], item[0]))
+                distances, key=lambda item: (item[1], item[0]))
 
             # 如果一个文本库部分覆盖到多个单元格，且覆盖面相近时，优先判断距离
-            print(i, sorted_distances[0], sorted_distances[1])
+            # print(ids, distances.index(sorted_distances[0]), distances.index(sorted_distances[1]),
+            #       sorted_distances[0], sorted_distances[1])
             prop_cell_idx = distances.index(sorted_distances[0])
-            if len(sorted_distances) > 1 \
-                    and abs(sorted_distances[0][1] - sorted_distances[1][1]) < 0.1:
-                if sorted_distances[0][0] > sorted_distances[1][0]:
-                    prop_cell_idx = distances.index(sorted_distances[1])
 
-            print(f'{i} >> {prop_cell_idx}')
+            if len(sorted_distances) > 1 and sorted_distances[0][1] > 0.4:
+                diff = abs(sorted_distances[0][1] - sorted_distances[1][1])
+                if diff < 0.15:
+                    # 覆盖面相近时，优先判断与单元格的距离
+                    if sorted_distances[0][0] > sorted_distances[1][0]:
+                        prop_cell_idx = distances.index(sorted_distances[1])
+
             if prop_cell_idx not in matched.keys():
-                matched[prop_cell_idx] = [i]
+                matched[prop_cell_idx] = ids
             else:
-                matched[prop_cell_idx].append(i)
+                matched[prop_cell_idx] += ids
         return matched
 
     def get_pred_html(self, pred_structures, matched_index, ocr_contents):
