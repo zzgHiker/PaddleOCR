@@ -35,110 +35,218 @@ def cal_area(roi):
     return max(0, w) * max(0, h)
 
 
-def bbox2rect(rect):
+def box2rect(box):
     """
-    矩形坐标   [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-    转ROI坐标  [x1, y1, x2, y2]
+    Box坐标    [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    转Rect坐标  [x1, y1, x2, y2]
     """
-    assert len(rect) in [2, 4]
+    assert np.shape(box) == (4, 2)
 
-    if len(rect) == 4:
-        return np.array(rect[::2]).flatten()
-    elif len(rect) == 2:
-        return np.array(rect).flatten()
+    np_box = np.reshape(box, -1)
+    x1, x2 = min(np_box[::2]), max(np_box[::2])
+    y1, y2 = min(np_box[1::2]), max(np_box[1::2])
+
+    return [x1, y1, x2, y2]
 
 
-def rect2bbox(roi):
-    assert len(roi) == 4
+def box2roi(box):
+    """
+    Box坐标   [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    转ROI坐标  [x1, y1, w, h]
+    """
+    assert np.shape(box) == (4, 2)
 
-    x1, y1, x2, y2 = roi
+    np_box = np.reshape(box, -1)
+    x1, x2 = min(np_box[::2]), max(np_box[::2])
+    y1, y2 = min(np_box[1::2]), max(np_box[1::2])
+
+    return [x1, y1, x2 - x1, y2 - y1]
+
+
+def rect2box(rect):
+    """
+    Rect坐标  [x1, y1, x2, y2]
+    转Box坐标  [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    """
+    assert np.shape(rect) == (4,)
+
+    x1, y1, x2, y2 = rect
     return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
 
 
-def is_union_horizontal(bbox_1, bbox_2, thresh=0.5):
+def get_slope(box):
+    assert np.shape(box) == (4, 2)
+
+    np_box = np.reshape(box, -1)
+
+    c_x1, c_x2 = (np_box[0] + np_box[2]) / 2, (np_box[4] + np_box[6]) / 2
+    c_y1, c_y2 = (np_box[1] + np_box[7]) / 2, (np_box[3] + np_box[5]) / 2
+
+    delta_x, delta_y = c_x2 - c_x1, c_y2 - c_y1
+
+    w, h = (np_box[2] + np_box[4] - np_box[0] - np_box[6]) / 2, (np_box[5] + np_box[7] - np_box[1] - np_box[3]) / 2
+
+    # 水平斜率：deltaY / width
+    slope_h = float('inf') if w == 0 else delta_y / w
+
+    # 垂直斜率: deltaX / height
+    slope_v = float('inf') if h == 0 else delta_x / h
+
+    return slope_h, slope_v
+
+
+def predict_y(src_pt, dest_x, slope_h=0):
+    delta_x = dest_x - src_pt[0]
+    return src_pt[1] if delta_x == 0 else src_pt[1] + delta_x * slope_h
+
+
+def is_union_horizontal(bbox_1, bbox_2, threshold=0.7):
     """判断是否水平相连"""
-    rect_1 = bbox2rect(bbox_1)
-    rect_2 = bbox2rect(bbox_2)
+    roi1 = box2roi(bbox_1)
+    roi2 = box2roi(bbox_2)
 
     # 计算两个矩形的交集RECT坐标
-    i_x1 = max(rect_1[0], rect_2[0])
-    i_y1 = max(rect_1[1], rect_2[1])
-    i_x2 = min(rect_1[2], rect_2[2])
-    i_y2 = min(rect_1[3], rect_2[3])
+    i_left = max(roi1[0], roi2[0])
+    i_top = max(roi1[1], roi2[1])
+    i_right = min(roi1[0] + roi1[2], roi2[0] + roi2[2])
+    i_bottom = min(roi1[1] + roi1[3], roi2[1] + roi2[3])
 
-    # 计算交集的面积
-    intersection_area = cal_area([i_x1, i_y1, i_x2, i_y2])
-    v_intersection_area1 = cal_area([i_x1, rect_1[1], i_x2, rect_1[3]])
-    v_intersection_area2 = cal_area([i_x1, rect_2[1], i_x2, rect_2[3]])
+    # 计算交集面积
+    i_area = cal_area([i_left, i_top, i_right, i_bottom])
 
-    # 计算两个矩形的并集的面积
-    area1 = cal_area(rect_1)
-    area2 = cal_area(rect_2)
-    union_area = area1 + area2 - intersection_area
+    if i_area == 0:
+        # 没有交集
+        return False
 
-    # 计算交并比（IoU）
-    iou = intersection_area / union_area
+    # 使用重合部分垂直方向重叠率判断是否水平相连
+    # 引入斜率，减少倾角大时的误判概率
+    slope = get_slope(bbox_1)[0] if roi1[2] > roi2[2] else get_slope(bbox_2)[0]
+
+    # 根据斜率，计算在重叠区域，box1 和 box2的 top 和 bottom
+    v_top1, v_bottom1 = predict_y(bbox_1[0], i_left, slope), predict_y(bbox_1[2], i_right, slope)
+    v_top2, v_bottom2 = predict_y(bbox_2[0], i_left, slope), predict_y(bbox_2[2], i_right, slope)
+
+    v_area1 = cal_area([i_left, v_top1, i_right, v_bottom1])
+    v_area2 = cal_area([i_left, v_top2, i_right, v_bottom2])
+
     # 垂直方向重叠率
-    iov = 0
-    if iou > 0:
-        iov = intersection_area / min(v_intersection_area1, v_intersection_area2)
-    return iou > 0 and iov > thresh
+    iov = i_area / min(v_area1, v_area2)
+    return iov > threshold
 
 
-def merge_union_boxes(boxes):
-    """将相连Box合并起来"""
+def merge_union_boxes(boxes, debug=False):
+    """
+    将相连Box合并起来
+    :param boxes 需要合并的边框，Shape（-1，4，2）
+    """
+    size = len(boxes)
+    if size < 2:
+        # 少于2个，直接返回
+        return boxes
 
-    def merge_boxes(bbox1, bbox2):
-        """计算合并后的矩形坐标"""
-        rect1 = bbox2rect(bbox1)
-        rect2 = bbox2rect(bbox2)
+    def validate_box(box):
+        """检查边框是否符合要求"""
+        w1, w2 = box[1][0] - box[0][0], box[2][0] - box[3][0]
+        h1, h2 = box[3][1] - box[0][1], box[2][1] - box[1][1]
 
-        x1 = min(rect1[0], rect2[0])
-        y1 = min(rect1[1], rect2[1])
-        x2 = max(rect1[2], rect2[2])
-        y2 = max(rect1[3], rect2[3])
+        if max(w1, w2) / min(w1, w2) > 1.3 or max(h1, h2) / min(h1, h2) > 1.3:
+            # 当Box对边的长度比超过1.3时，舍弃该Box
+            return False
 
-        return rect2bbox([x1, y1, x2, y2])
+        # if abs(get_slope(box)[0]) > 0.5:
+        #     # 舍弃倾斜的Box
+        #     return False
+
+        return True
+
+    def merge_boxes(bbox1, bbox2, threshold=10):
+        """
+        计算合并后的Box坐标
+        :param bbox1 Box1坐标
+        :param bbox2 Box2坐标
+        :param threshold 垂直方向上的偏差阈值
+        """
+        # 计算两个边框的水平斜率
+        slope1 = get_slope(bbox1)[0]
+        slope2 = get_slope(bbox2)[0]
+
+        # 计算合并后的四个顶点的X，Y坐标
+        x1, y1 = bbox1[0] if bbox1[0][0] < bbox2[0][0] else bbox2[0]
+        x2, y2 = bbox1[1] if bbox1[1][0] > bbox2[1][0] else bbox2[1]
+        x3, y3 = bbox1[2] if bbox1[2][0] > bbox2[2][0] else bbox2[2]
+        x4, y4 = bbox1[3] if bbox1[3][0] < bbox2[3][0] else bbox2[3]
+
+        # 通过每个Box的斜率预测四个顶点的Y坐标
+        if threshold >= abs(box1[0][0] - box2[0][0]) >= 0:
+            y1 = min(predict_y(bbox1[0], x1, slope1), predict_y(bbox2[0], x1, slope2))
+        else:
+            pred_y1 = min(predict_y(bbox1[0], x1, slope1), predict_y(bbox2[0], x1, slope2))
+            if abs(pred_y1 - y1) < threshold:
+                y1 = min(y1, pred_y1)
+
+        if threshold >= abs(box1[1][0] - box2[1][0]) >= 0:
+            y2 = min(predict_y(bbox1[1], x2, slope1), predict_y(bbox2[1], x2, slope2))
+        else:
+            pred_y2 = min(predict_y(bbox1[1], x2, slope1), predict_y(bbox2[1], x2, slope2))
+            if abs(pred_y2 - y2) < threshold:
+                y2 = min(y2, pred_y2)
+
+        if threshold >= abs(box1[2][0] - box2[2][0]) >= 0:
+            y3 = max(predict_y(bbox1[2], x3, slope1), predict_y(bbox2[2], x3, slope2))
+        else:
+            pred_y3 = max(predict_y(bbox1[2], x3, slope1), predict_y(bbox2[2], x3, slope2))
+            if abs(pred_y3 - y3) < threshold:
+                y3 = max(y3, pred_y3)
+
+        if threshold >= abs(box1[2][0] - box2[2][0]) >= 0:
+            y4 = max(predict_y(bbox1[3], x4, slope1), predict_y(bbox2[3], x4, slope2))
+        else:
+            pred_y4 = max(predict_y(bbox1[3], x4, slope1), predict_y(bbox2[3], x4, slope2))
+            if abs(pred_y4 - y4) < threshold:
+                y4 = max(y4, pred_y4)
+
+        return [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
 
     # 存放合并后的Box集合
-    union_boxes = []
+    merged_boxes = []
     # 存放已处理的Box序号
     done_indexes = []
 
-    # 按照从上到下，从左到右排序
-    size = len(boxes)
+    boxes = list(filter(validate_box, boxes))
+
     for i, box1 in enumerate(boxes):
         if i in done_indexes:
             # 已处理，跳过
             continue
-        elif i == size - 1:
+        elif i == len(boxes) - 1:
             # 最后一个
-            union_boxes.append(copy.deepcopy(box1))
+            merged_boxes.append(copy.deepcopy(box1))
             break
 
         # 将相连的边界框合并成新的边界框
-        union_box = copy.deepcopy(box1)
-        for j in range(i + 1, size):
+        merged_box = copy.deepcopy(box1)
+
+        for j in range(i + 1, len(boxes)):
             # 与其他边界框进行比较处理
             box2 = boxes[j]
-            if is_union_horizontal(union_box, box2):
+            if is_union_horizontal(merged_box, box2):
                 # 相连合并成新边界框
                 done_indexes.append(j)
-                union_box = merge_boxes(union_box, box2)
+                merged_box = merge_boxes(merged_box, box2)
 
-        for k, box2 in enumerate(union_boxes):
+        for j, box2 in enumerate(merged_boxes):
             # 与已处理的边界框进行比较处理，避免遗漏
-            if is_union_horizontal(union_box, box2):
+            if is_union_horizontal(merged_box, box2):
                 # 和已处理的边界框相连
                 done_indexes.append(i)
-                union_boxes[k] = merge_boxes(union_box, box2)
+                merged_boxes[j] = merge_boxes(merged_box, box2)
 
         if i not in done_indexes:
             # 将新增合并边界框添加到集合中
             done_indexes.append(i)
-            union_boxes.append(union_box)
+            merged_boxes.append(merged_box)
 
-    return union_boxes
+    return merged_boxes
 
 
 class DBPostProcess(object):
@@ -357,7 +465,7 @@ class DBPostProcess(object):
                 boxes, scores = self.boxes_from_bitmap(pred[batch_index], mask,
                                                        src_w, src_h)
                 # todo: 合并相连的文本框
-                boxes = merge_union_boxes(boxes)
+                # boxes = merge_union_boxes(boxes)
             else:
                 raise ValueError("box_type can only be one of ['quad', 'poly']")
 

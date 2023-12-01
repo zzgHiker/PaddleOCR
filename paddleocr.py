@@ -836,6 +836,10 @@ def main():
                 drawer = ImageDraw(pil_img)
                 for idx in range(len(result)):
                     res = result[idx]
+                    if res is None:
+                        # 未检测到文本
+                        continue
+
                     for line in res:
                         box, (text, conf, char_pos) = line
                         box = np.asarray(box)
