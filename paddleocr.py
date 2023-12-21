@@ -61,7 +61,7 @@ from ppstructure.predict_system import StructureSystem, save_structure_res, to_e
 logger = get_logger()
 __all__ = [
     'PaddleOCR', 'PPStructure', 'draw_ocr', 'draw_structure_result',
-    'save_structure_res', 'download_with_progressbar', 'to_excel'
+    'save_structure_res', 'download_with_progressbar', 'to_excel', 'parse_args'
 ]
 
 SUPPORT_DET_MODEL = ['DB']
